@@ -39,7 +39,7 @@ From brand-new AWS account to a fully working cloud clipping platform.
 2. Fill in the launch form:
    - **Name**: `gta-clips-server`
    - **Application and OS Images**: Click **Ubuntu**, then select **Ubuntu Server 24.04 LTS (HVM)**, Architecture: **64-bit (x86)**.
-   - **Instance type**: Choose **`c6i.large`** (2 vCPUs, 4 GB RAM) for best video rendering performance, or **`t3.large`** for low-cost testing.
+   - **Instance type**: Choose **`m7i-flex.large`** (2 vCPUs, 8 GiB RAM, Free Tier Eligible) for the best balance of speed and memory, or **`c7i-flex.large`** (2 vCPUs, 4 GiB RAM). *(Avoid `t3.micro` because 1 GB RAM is too small for video processing).*
    - **Key pair (login)**: Select the `gta-clips-key` you created in Step 2.
 3. Under **Network settings**, click **Edit** (or check the boxes directly):
    - Check **Allow SSH traffic from**: `Anywhere` (or `My IP` for extra security).

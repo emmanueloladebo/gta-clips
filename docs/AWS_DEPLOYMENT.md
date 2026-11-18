@@ -10,8 +10,8 @@ Yes, hosting the entire platform on **Amazon Web Services (AWS)** is completely 
 This is the simplest, most cost-effective option and matches the [infra/docker-compose.yml](file:///c:/Users/olade/Documents/GitHub/gta-clips/infra/docker-compose.yml) setup directly.
 
 - **Compute**: Single EC2 instance (Ubuntu 24.04 LTS).
-  - Recommended instance: **`c7g.large`** (2 vCPU, 4 GB RAM, AWS Graviton3) or **`c6i.large`** (2 vCPU, 4 GB RAM, Intel).
-  - Why compute-optimized (`c` series): FFmpeg video rendering and Streamlink capture benefit heavily from dedicated CPU performance.
+  - Recommended instance: **`m7i-flex.large`** (2 vCPU, 8 GiB RAM, Free Tier Eligible) or **`c7i-flex.large`** (2 vCPU, 4 GiB RAM).
+  - Why `m7i-flex.large`: 8 GiB of memory gives plenty of room for Docker, PostgreSQL, Redis, and FFmpeg video rendering without memory pressure.
 - **Storage**:
   - Root & Scratch Disk: 50–100 GB EBS `gp3` volume (handles temporary 10-minute video segments before 24-hour cleanup).
 - **Networking**:
