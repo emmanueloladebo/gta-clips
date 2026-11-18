@@ -1,6 +1,8 @@
 """
 Streamer management API endpoints.
 """
+import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.shared.database import get_db
+from packages.shared.database import get_db, AsyncSessionLocal
 from packages.shared.models import Streamer, CreatorPermission, AuditEvent, User
 from packages.shared.enums import StreamerStatus, PermissionStatus
 from packages.shared.schemas import StreamerCreate, StreamerUpdate, StreamerResponse
@@ -188,7 +190,52 @@ async def trigger_live_check(
     return streamer
 
 
-@router.post("/{streamer_id}/capture-now")
+async def _run_capture_pipeline_bg(streamer_id: int, duration: int):
+    """Background task to capture, transcribe, score, and render clip without blocking API response."""
+    logging.info(f"Background capture started for streamer_id={streamer_id} (duration={duration}s)")
+    async with AsyncSessionLocal() as db:
+        stmt = select(Streamer).where(Streamer.id == streamer_id)
+        streamer = (await db.execute(stmt)).scalar_one_or_none()
+        if not streamer:
+            logging.error(f"Streamer {streamer_id} not found in background capture")
+            return
+
+        from workers.capture_worker import capture_worker
+        from workers.transcription_worker import transcription_worker
+        from workers.candidate_worker import candidate_worker
+        from workers.render_worker import render_worker
+        from workers.storage_worker import storage_worker
+        from packages.shared.config import settings
+
+        try:
+            # 1. Capture slice
+            segment = await capture_worker.capture_sample_now(db, streamer, duration_seconds=duration)
+            if not segment:
+                logging.error(f"Failed to capture slice for {streamer.display_name}")
+                return
+
+            # 2. Transcribe
+            transcript = await transcription_worker.process_segment(segment.id)
+            if not transcript:
+                logging.error(f"Audio transcription failed for segment {segment.id}")
+                return
+
+            # 3. Score for virality (strictly gated by settings.VIRAL_SCORE_THRESHOLD)
+            candidates = await candidate_worker.process_segment_candidates(segment.id)
+            logging.info(f"Groq evaluated segment {segment.id}: {len(candidates)} candidates scored >= {settings.VIRAL_SCORE_THRESHOLD}")
+
+            # 4. Render viral clips
+            for cand in candidates:
+                if cand.score >= settings.VIRAL_SCORE_THRESHOLD:
+                    clip = await render_worker.render_candidate_to_clip(cand.id)
+                    if clip:
+                        await storage_worker.upload_clip_to_r2(clip.id)
+                        logging.info(f"Successfully rendered viral clip {clip.id}: '{clip.title}'")
+        except Exception as e:
+            logging.exception(f"Error in background capture for {streamer.display_name}: {e}")
+
+
+@router.post("/{streamer_id}/capture-now", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_instant_capture(
     streamer_id: int,
     duration: int = 60,
@@ -196,51 +243,23 @@ async def trigger_instant_capture(
     user: User = Depends(require_current_user)
 ):
     """
-    On-demand capture test: records an immediate slice (default 60s) of the live stream,
-    transcribes it, runs the strict virality filter, and renders a split-screen vertical clip.
+    On-demand capture test (Asynchronous): starts recording a live stream slice in the background,
+    returning 202 Accepted immediately so reverse proxies (Caddy/Nginx) never timeout.
     """
     stmt = select(Streamer).where(Streamer.id == streamer_id)
     streamer = (await db.execute(stmt)).scalar_one_or_none()
     if not streamer:
         raise HTTPException(status_code=404, detail="Streamer not found")
 
-    from workers.capture_worker import capture_worker
-    from workers.transcription_worker import transcription_worker
-    from workers.candidate_worker import candidate_worker
-    from workers.render_worker import render_worker
-    from workers.storage_worker import storage_worker
     from packages.shared.config import settings
 
-    # 1. Capture slice
-    segment = await capture_worker.capture_sample_now(db, streamer, duration_seconds=duration)
-    if not segment:
-        raise HTTPException(status_code=500, detail="Failed to capture stream slice. Please verify stream is live.")
-
-    # 2. Transcribe
-    transcript = await transcription_worker.process_segment(segment.id)
-    if not transcript:
-        raise HTTPException(status_code=500, detail="Audio transcription failed.")
-
-    # 3. Score for virality (filtered by settings.VIRAL_SCORE_THRESHOLD)
-    candidates = await candidate_worker.process_segment_candidates(segment.id)
-
-    # 4. Render viral clips
-    rendered_clips = []
-    for cand in candidates:
-        if cand.score >= settings.VIRAL_SCORE_THRESHOLD:
-            clip = await render_worker.render_candidate_to_clip(cand.id)
-            if clip:
-                await storage_worker.upload_clip_to_r2(clip.id)
-                rendered_clips.append(clip.id)
+    # Launch background capture task
+    asyncio.create_task(_run_capture_pipeline_bg(streamer.id, duration))
 
     return {
-        "status": "success",
+        "status": "processing",
+        "message": f"Capture started for {streamer.display_name}. Recording {duration}s slice in background. Clip will appear in Review when done.",
         "streamer": streamer.display_name,
-        "segment_id": segment.id,
         "duration_seconds": duration,
-        "transcribed_text_preview": transcript.text[:120],
-        "viral_candidates_count": len(candidates),
-        "clips_rendered_count": len(rendered_clips),
-        "clip_ids": rendered_clips,
         "viral_threshold_used": settings.VIRAL_SCORE_THRESHOLD
     }

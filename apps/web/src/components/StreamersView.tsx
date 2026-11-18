@@ -77,7 +77,7 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
     setCapturingId(id);
     try {
       await onInstantCapture(id);
-      alert('Capture initiated! The 60-second slice has been recorded, transcribed, and evaluated through the viral filter.');
+      alert('Capture started! We are recording a 60-second slice in the background. It will transcribe the audio, score for viral moments, and appear in Review shortly.');
     } catch (err: any) {
       alert(err.message || 'Capture slice failed');
     } finally {

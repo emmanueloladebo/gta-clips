@@ -16,6 +16,7 @@ from packages.shared.config import settings
 from packages.shared.database import AsyncSessionLocal
 from packages.shared.models import Candidate, Segment, StreamSession, Streamer, Clip, UsageRecord
 from packages.shared.enums import CandidateStatus, ApprovalStatus, MetricType
+from workers.facecam_detector import facecam_detector
 
 
 class FFmpegRenderWorker:
@@ -29,7 +30,8 @@ class FFmpegRenderWorker:
         streamer_name: str,
         quote_text: str,
         headline_text: str = "",
-        facecam_pos: str = "top_right"
+        facecam_pos: str = "top_right",
+        crop_cam: Optional[str] = None
     ) -> str:
         """
         Creates an FFmpeg complex filter for viral split-screen vertical video:
@@ -42,17 +44,22 @@ class FFmpegRenderWorker:
         clean_headline = (headline_text or "GTA 6 HIGHLIGHT").upper().replace("'", "\\'").replace(":", "\\:")
         clean_quote = quote_text[:70].replace("'", "\\'").replace(":", "\\:")
 
-        # Crop parameters for facecam based on typical streamer overlay layouts
-        if facecam_pos == "top_left":
-            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=0"
-        elif facecam_pos == "bottom_right":
-            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58"
-        elif facecam_pos == "bottom_left":
-            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58"
-        elif facecam_pos == "center_zoom":
-            crop_cam = "crop=w=iw*0.45:h=ih*0.5:x=iw*0.27:y=0"
-        else:  # top_right default
-            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0"
+        # If dynamic facecam crop coordinates provided from detection, use them
+        if not crop_cam or not crop_cam.startswith("crop="):
+            if facecam_pos == "top_left":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=0"
+            elif facecam_pos == "middle_left":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.28"
+            elif facecam_pos == "bottom_right":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58"
+            elif facecam_pos == "bottom_left":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58"
+            elif facecam_pos == "middle_right":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.28"
+            elif facecam_pos == "top_center" or facecam_pos == "center_zoom":
+                crop_cam = "crop=w=iw*0.42:h=ih*0.45:x=iw*0.29:y=0"
+            else:  # top_right default
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0"
 
         filter_complex = (
             # 1. Split stream into facecam feed and gameplay feed
@@ -83,14 +90,16 @@ class FFmpegRenderWorker:
         streamer_name: str,
         quote_text: str,
         headline_text: str = "",
-        facecam_pos: str = "top_right"
+        facecam_pos: str = "top_right",
+        crop_cam: Optional[str] = None
     ) -> bool:
         """Execute FFmpeg command to produce 1080x1920 H.264/AAC MP4."""
         filter_str = self.build_ffmpeg_filter(
             streamer_name=streamer_name,
             quote_text=quote_text,
             headline_text=headline_text,
-            facecam_pos=facecam_pos
+            facecam_pos=facecam_pos,
+            crop_cam=crop_cam
         )
         cmd = [
             "ffmpeg", "-y",
@@ -196,6 +205,12 @@ class FFmpegRenderWorker:
                 tags_list.insert(1, "#gta6")
             final_tags = " ".join(tags_list[:5])
 
+            # Detect smart streamer facecam coordinates across candidate regions (left, middle-left, top-right, middle-right, top)
+            crop_cam, detected_region = facecam_detector.detect_streamer_facecam(
+                video_path=segment.file_path,
+                preferred_position=facecam_pos
+            )
+
             self.render_vertical_clip(
                 input_file=segment.file_path,
                 start_sec=start_sec,
@@ -204,7 +219,8 @@ class FFmpegRenderWorker:
                 streamer_name=streamer_name,
                 quote_text=candidate.evidence_quote,
                 headline_text=headline,
-                facecam_pos=facecam_pos
+                facecam_pos=detected_region,
+                crop_cam=crop_cam
             )
 
             self.generate_thumbnail(
