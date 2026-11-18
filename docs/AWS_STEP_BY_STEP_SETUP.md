@@ -120,10 +120,35 @@ docker compose version
 
 ## Step 7: Clone This Project on the Server
 
-Clone your repository into `/opt/gta-clips`:
-
+### If your repository is Public:
 ```bash
 sudo git clone https://github.com/YOUR_GITHUB_USERNAME/gta-clips.git /opt/gta-clips
+sudo chown -R ubuntu:ubuntu /opt/gta-clips
+cd /opt/gta-clips
+```
+
+### If your repository is Private (2 Easy Ways):
+
+#### Option A: Use a GitHub Personal Access Token (Fastest)
+1. On GitHub, click your profile photo in the top right -> **Settings**.
+2. Scroll down on the left menu and click **Developer settings** -> **Personal access tokens** -> **Tokens (classic)**.
+3. Click **Generate new token (classic)**, name it `aws-server`, check the **`repo`** box, and click **Generate token**.
+4. Copy the token (e.g. `ghp_xxxxxx...`).
+5. On your server, clone using the token in the URL:
+   ```bash
+   sudo git clone https://YOUR_TOKEN@github.com/YOUR_GITHUB_USERNAME/gta-clips.git /opt/gta-clips
+   sudo chown -R ubuntu:ubuntu /opt/gta-clips
+   cd /opt/gta-clips
+   ```
+
+#### Option B: Copy Directly From Your Computer (No GitHub token needed)
+Open a new PowerShell window on your personal computer and upload your local folder directly to the server:
+```powershell
+scp -i ~/Downloads/gta-clips-key.pem -r . ubuntu@YOUR_ELASTIC_IP:/home/ubuntu/gta-clips
+```
+Then on your server:
+```bash
+sudo mv /home/ubuntu/gta-clips /opt/gta-clips
 sudo chown -R ubuntu:ubuntu /opt/gta-clips
 cd /opt/gta-clips
 ```
