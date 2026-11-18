@@ -1,0 +1,30 @@
+{$PUBLIC_DOMAIN:localhost} {
+    # Encode responses
+    encode gzip zstd
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Proxy API and Docs
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    handle /docs* {
+        reverse_proxy api:8000
+    }
+
+    handle /openapi.json {
+        reverse_proxy api:8000
+    }
+
+    # Proxy Web Frontend
+    handle {
+        reverse_proxy web:80
+    }
+}

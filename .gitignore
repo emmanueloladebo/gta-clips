@@ -1,0 +1,22 @@
+# Environments & Dependencies
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local media scratch and databases
+scratch/
+data/
+*.db
+*.sqlite3
+
+# Environment secrets
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db

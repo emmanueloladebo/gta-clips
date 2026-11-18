@@ -1,0 +1,32 @@
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Install system dependencies: ffmpeg, streamlink, fonts for video captions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    streamlink \
+    curl \
+    ca-certificates \
+    fonts-dejavu-core \
+    fonts-liberation \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application source
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+COPY workers/ ./workers/
+
+# Create scratch directory
+RUN mkdir -p /scratch /data
+
+CMD ["python", "-m", "workers.runner"]
