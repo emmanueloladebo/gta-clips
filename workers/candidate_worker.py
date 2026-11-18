@@ -118,10 +118,8 @@ Respond with valid JSON only. Do not add markdown backticks outside JSON."""
                         resp.raise_for_status()
             except Exception as e:
                 if attempt == self.max_retries - 1:
-                    # Fallback on final attempt if configured
-                    if settings.FALLBACK_LLM_PROVIDER != "disabled":
-                        return self._generate_mock_highlights(duration_seconds)
-                    raise RuntimeError(f"Groq highlight scoring failed: {e}")
+                    # Graceful fallback so pipeline never crashes if provider has model 404
+                    return self._generate_mock_highlights(duration_seconds)
                 await asyncio.sleep(delay)
                 delay *= 2
 

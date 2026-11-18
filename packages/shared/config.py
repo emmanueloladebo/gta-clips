@@ -38,7 +38,7 @@ class Settings(BaseSettings):
 
     # AI Highlight Scorer (Groq LLM)
     GROQ_API_KEY: str = ""
-    GROQ_MODEL_ID: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL_ID: str = "openai/gpt-oss-120b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
 
     # Fallback LLM Provider
