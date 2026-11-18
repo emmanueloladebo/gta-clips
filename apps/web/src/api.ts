@@ -88,6 +88,8 @@ export const api = {
     request<DestinationAccount[]>('/publishing/destinations/sync', { method: 'POST' }),
   addDestination: (data: any) =>
     request<DestinationAccount>('/publishing/destinations', { method: 'POST', body: JSON.stringify(data) }),
+  deleteDestination: (id: number) =>
+    request<void>(`/publishing/destinations/${id}`, { method: 'DELETE' }),
   getPublishJobs: () => request<PublishJob[]>('/publishing/jobs'),
   publishClip: (clip_id: number, destination_account_id: number) =>
     request<PublishJob>('/publishing/publish', {

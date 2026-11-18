@@ -119,6 +119,11 @@ export const App: React.FC = () => {
     await fetchData();
   };
 
+  const handleDeleteDestination = async (id: number) => {
+    await api.deleteDestination(id);
+    await fetchData();
+  };
+
   const handleSyncZernio = async () => {
     await api.syncZernioDestinations();
     await fetchData();
@@ -191,6 +196,7 @@ export const App: React.FC = () => {
               clips={clips}
               autoPostEnabled={autoPostEnabled}
               onAddDestination={handleAddDestination}
+              onDeleteDestination={handleDeleteDestination}
               onSyncZernio={handleSyncZernio}
               onPublishClip={handlePublishClip}
               onRetryJob={handleRetryJob}

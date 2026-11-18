@@ -79,21 +79,7 @@ class ZernioAdapter:
         except Exception:
             pass
 
-        # Graceful fallback if Zernio API accounts list isn't ready yet
-        return [
-            {
-                "platform": "tiktok",
-                "account_name": "@gta6dailyclips",
-                "external_account_id": "tt_gta6dailyclips",
-                "is_active": True,
-            },
-            {
-                "platform": "youtube_shorts",
-                "account_name": "GTA 6 Highlights",
-                "external_account_id": "yt_gta6highlights",
-                "is_active": True,
-            }
-        ]
+        return []
 
     async def submit_publish_job(
         self,

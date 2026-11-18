@@ -105,6 +105,21 @@ async def create_destination(
     return account
 
 
+@router.delete("/destinations/{dest_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_destination(
+    dest_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_current_user)
+):
+    stmt = select(DestinationAccount).where(DestinationAccount.id == dest_id)
+    account = (await db.execute(stmt)).scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Destination account not found")
+
+    await db.delete(account)
+    await db.commit()
+
+
 @router.get("/jobs", response_model=List[PublishJobResponse])
 async def list_publish_jobs(
     clip_id: Optional[int] = None,

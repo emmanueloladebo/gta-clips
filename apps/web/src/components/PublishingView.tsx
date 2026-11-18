@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Plus, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-react';
+import { Send, Plus, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck, ExternalLink, Trash2 } from 'lucide-react';
 import { DestinationAccount, PublishJob, Clip } from '../types';
 
 interface PublishingViewProps {
@@ -8,6 +8,7 @@ interface PublishingViewProps {
   clips: Clip[];
   autoPostEnabled: boolean;
   onAddDestination: (data: any) => Promise<void>;
+  onDeleteDestination?: (id: number) => Promise<void>;
   onSyncZernio?: () => Promise<void>;
   onPublishClip: (clipId: number, destId: number) => Promise<void>;
   onRetryJob: (jobId: number) => Promise<void>;
@@ -19,6 +20,7 @@ export const PublishingView: React.FC<PublishingViewProps> = ({
   clips,
   autoPostEnabled,
   onAddDestination,
+  onDeleteDestination,
   onSyncZernio,
   onPublishClip,
   onRetryJob,
@@ -169,13 +171,28 @@ export const PublishingView: React.FC<PublishingViewProps> = ({
             {destinations.map((dest) => (
               <div
                 key={dest.id}
-                className="p-4 rounded-2xl bg-vice-card border border-vice-border space-y-2"
+                className="p-4 rounded-2xl bg-vice-card border border-vice-border space-y-2 relative group"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-vice-dark text-slate-400 border border-vice-border">
                     {dest.platform.replace('_', ' ')}
                   </span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    {onDeleteDestination && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove ${dest.account_name}?`)) {
+                            onDeleteDestination(dest.id);
+                          }
+                        }}
+                        className="text-slate-500 hover:text-rose-400 p-1 rounded transition-colors"
+                        title="Remove destination"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <h4 className="font-bold text-white text-sm">{dest.account_name}</h4>
                 <p className="text-[11px] text-slate-400">ID: {dest.external_account_id}</p>
