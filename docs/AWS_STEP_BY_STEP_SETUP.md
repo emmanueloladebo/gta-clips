@@ -74,9 +74,14 @@ Navigate to where you saved your `.pem` key:
 cd ~/Downloads
 ```
 
-On Windows PowerShell, set the key permissions and SSH in (replace `3.120.45.67` with your Elastic IP):
+On Windows PowerShell, lock down the key permissions first (Windows OpenSSH requires this):
 ```powershell
-ssh -i gta-clips-key.pem ubuntu@3.120.45.67
+icacls.exe .\gta-clips-key.pem /inheritance:r /grant:r "$($env:USERNAME):(R)"
+```
+
+Then SSH into your server (replace with your Elastic IP):
+```powershell
+ssh -i gta-clips-key.pem ubuntu@YOUR_ELASTIC_IP
 ```
 *(If prompted: `Are you sure you want to continue connecting (yes/no)?`, type `yes` and press Enter).*
 
