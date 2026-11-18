@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     SEGMENT_SECONDS: int = 600  # 10 minutes per segment
     MAX_CONCURRENT_STREAMS: int = 3
     AUTO_POST_ENABLED: bool = False  # Review-before-post default
+    VIRAL_SCORE_THRESHOLD: float = 85.0  # Strict virality gate (0-100)
 
     # Social Publishing (Zernio)
     ZERNIO_API_KEY: str = ""

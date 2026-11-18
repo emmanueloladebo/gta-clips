@@ -33,6 +33,7 @@ class SegmentStatus(str, Enum):
     RECORDING = "recording"
     RECORDED = "recorded"
     TRANSCRIBING = "transcribing"
+    TRANSCRIBED = "transcribed"
     SCORED = "scored"
     RENDERED = "rendered"
     CLEANED = "cleaned"

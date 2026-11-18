@@ -30,15 +30,22 @@ class GroqCandidateWorker:
         self.max_retries = 3
 
     def build_prompt(self, transcript_text: str, duration_seconds: float) -> str:
-        """Construct bounded prompt requesting strict JSON schema output."""
-        return f"""You are an expert livestream editor for Grand Theft Auto VI.
+        """Construct bounded prompt requesting strict JSON schema output with strict virality gate."""
+        return f"""You are an elite, highly selective viral video editor and curator for Grand Theft Auto VI.
 Analyze the following transcript from a {duration_seconds:.0f}-second video segment.
-Find high-energy gaming highlights, hilarious streamer reactions, intense police chases, heist action, or hype gameplay moments.
+
+CRITICAL VIRALITY RULE:
+You must be EXTREMELY SELECTIVE. Most 10-minute gaming segments do NOT have viral moments.
+If this segment is just standard driving, casual talk, routine gameplay, or ordinary combat with no exceptional climax, DO NOT FORCE A CLIP. Return an empty array:
+{{"highlights": []}}
+
+ONLY return a highlight if it is a genuine 9/10 or 10/10 viral moment (e.g. insane heist escape, hilarious glitch, uncontrollable streamer reaction, 5-star police chaos).
+Any highlight returned must have a score >= 85.0.
 
 Rules:
 1. Each clip must be between 15 and 60 seconds total length.
 2. Include 5 to 15 seconds of lead-in context before the climax.
-3. Provide scores from 0 to 100 for overall quality, excitement, and clarity.
+3. Provide scores from 0 to 100 for overall quality, excitement, and clarity. Only give >= 85 if truly viral.
 4. Quote the exact spoken words as evidence.
 5. Provide a punchy 'headline' (3-6 words, uppercase, e.g. "WHEN 5 STARS HIT AT ONCE 🚁") to place as the middle headline banner on the vertical video.
 6. Write a natural, conversational 'caption' for TikTok (simple words, no big english).
@@ -58,9 +65,9 @@ JSON Schema:
       "start_second": 10.0,
       "end_second": 40.0,
       "duration_seconds": 30.0,
-      "score": 88.5,
-      "excitement_score": 92.0,
-      "clarity_score": 85.0,
+      "score": 92.5,
+      "excitement_score": 95.0,
+      "clarity_score": 88.0,
       "why_highlight": "Natural explanation of why this moment is fun or intense",
       "evidence_quote": "Exact transcript text",
       "safety_flags": []
@@ -204,8 +211,11 @@ Respond with valid JSON only. Do not add markdown backticks outside JSON."""
             raw_highlights = await self.score_transcript(transcript.text, segment.duration_seconds)
             deduped = self.deduplicate_candidates(raw_highlights)
 
+            # Strict Virality Gate: only moments meeting or exceeding the viral threshold are saved
+            viral_highlights = [h for h in deduped if h.score >= settings.VIRAL_SCORE_THRESHOLD]
+
             db_candidates = []
-            for h in deduped:
+            for h in viral_highlights:
                 # Dedupe key based on segment and time window
                 time_key = f"{segment.id}_{int(h.start_second)}_{int(h.end_second)}"
                 dedupe_hash = hashlib.sha256(time_key.encode()).hexdigest()[:16]

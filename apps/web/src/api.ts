@@ -63,6 +63,8 @@ export const api = {
     request<Streamer>('/streamers', { method: 'POST', body: JSON.stringify(data) }),
   checkStreamerLive: (id: number) =>
     request<Streamer>(`/streamers/${id}/check-live`, { method: 'POST' }),
+  triggerInstantCapture: (id: number, duration: number = 60) =>
+    request<any>(`/streamers/${id}/capture-now?duration=${duration}`, { method: 'POST' }),
   deleteStreamer: (id: number) =>
     request<void>(`/streamers/${id}`, { method: 'DELETE' }),
 

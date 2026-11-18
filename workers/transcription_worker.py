@@ -181,6 +181,7 @@ class DeepgramTranscriptionWorker:
                     sound_events_json=result.get("sound_events", []),
                     provider="deepgram" if not self.mock_mode else "deepgram_mock"
                 )
+                segment.status = SegmentStatus.TRANSCRIBED.value
                 db.add(transcript)
 
                 # Record transcription usage

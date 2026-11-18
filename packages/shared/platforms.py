@@ -42,40 +42,72 @@ class TwitchAdapter:
         return None
 
     async def check_live_status(self, channel_login: str) -> Dict[str, Any]:
-        """Check live status using Twitch Helix API."""
+        """
+        Check live status using Twitch Helix API (if app keys present)
+        or high-speed Twitch GQL metadata endpoint (real-time viewers, title, game without developer keys).
+        """
+        clean_login = channel_login.lower().strip().replace("https://twitch.tv/", "").replace("twitch.tv/", "").rstrip("/")
         token = await self._get_app_token()
-        if not token:
-            # Fallback to streamlink probe
-            return await check_streamlink_live(f"https://twitch.tv/{channel_login}")
+        if token:
+            try:
+                headers = {
+                    "Client-ID": self.client_id,
+                    "Authorization": f"Bearer {token}"
+                }
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    res = await client.get(
+                        "https://api.twitch.tv/helix/streams",
+                        headers=headers,
+                        params={"user_login": clean_login}
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        streams = data.get("data", [])
+                        if streams:
+                            s = streams[0]
+                            return {
+                                "is_live": True,
+                                "title": s.get("title", ""),
+                                "game": s.get("game_name", ""),
+                                "viewers": s.get("viewer_count", 0),
+                                "session_id": s.get("id")
+                            }
+                        return {"is_live": False, "title": None, "game": None, "viewers": 0, "session_id": None}
+            except Exception:
+                pass
 
+        # High-speed public Twitch GQL metadata endpoint
         try:
-            headers = {
-                "Client-ID": self.client_id,
-                "Authorization": f"Bearer {token}"
+            gql_headers = {
+                "Client-ID": "kimne78kx3ncx6brgo4mv6wki5h1ko",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.get(
-                    "https://api.twitch.tv/helix/streams",
-                    headers=headers,
-                    params={"user_login": channel_login}
-                )
+            gql_payload = [
+                {
+                    "operationName": "StreamMetadata",
+                    "variables": {"channelLogin": clean_login},
+                    "query": "query StreamMetadata($channelLogin: String!) { user(login: $channelLogin) { stream { id title viewersCount game { name } } } }"
+                }
+            ]
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                res = await client.post("https://gql.twitch.tv/gql", headers=gql_headers, json=gql_payload)
                 if res.status_code == 200:
                     data = res.json()
-                    streams = data.get("data", [])
-                    if streams:
-                        s = streams[0]
-                        return {
-                            "is_live": True,
-                            "title": s.get("title", ""),
-                            "game": s.get("game_name", ""),
-                            "viewers": s.get("viewer_count", 0),
-                            "session_id": s.get("id")
-                        }
-                    return {"is_live": False, "title": None, "game": None, "viewers": 0, "session_id": None}
+                    if isinstance(data, list) and len(data) > 0:
+                        stream = data[0].get("data", {}).get("user", {}).get("stream")
+                        if stream:
+                            return {
+                                "is_live": True,
+                                "title": stream.get("title") or "GTA 6 Livestream",
+                                "game": (stream.get("game") or {}).get("name") or "Grand Theft Auto VI",
+                                "viewers": stream.get("viewersCount", 0),
+                                "session_id": str(stream.get("id") or "")
+                            }
+                        return {"is_live": False, "title": None, "game": None, "viewers": 0, "session_id": None}
         except Exception:
             pass
 
-        return await check_streamlink_live(f"https://twitch.tv/{channel_login}")
+        return await check_streamlink_live(f"https://twitch.tv/{clean_login}")
 
 
 class YouTubeAdapter:
@@ -121,21 +153,26 @@ class YouTubeAdapter:
 
 async def check_streamlink_live(channel_url: str) -> Dict[str, Any]:
     """
-    Fallback probe using streamlink python library.
+    Fallback probe using streamlink CLI.
     Checks whether live streams are discoverable without requiring platform API keys.
     """
     try:
-        session = streamlink.Streamlink()
-        # Common options
-        session.set_option("stream-timeout", 5)
-        streams = session.streams(channel_url)
-        if streams and ("best" in streams or "live" in streams or len(streams) > 0):
+        proc = await asyncio.create_subprocess_exec(
+            "streamlink", "--json", channel_url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=12.0)
+        if proc.returncode == 0 and stdout:
+            import json
+            data = json.loads(stdout.decode())
+            meta = data.get("metadata", {})
             return {
                 "is_live": True,
-                "title": "Live Stream",
-                "game": "Grand Theft Auto VI",
+                "title": meta.get("title") or "Live Stream",
+                "game": meta.get("category") or "Grand Theft Auto VI",
                 "viewers": 0,
-                "session_id": f"sl_{int(datetime.now(timezone.utc).timestamp())}"
+                "session_id": str(meta.get("id") or f"sl_{int(datetime.now(timezone.utc).timestamp())}")
             }
     except Exception:
         pass

@@ -59,7 +59,7 @@ async def candidate_loop():
     while not _shutdown_event.is_set():
         try:
             async with AsyncSessionLocal() as db:
-                stmt = select(Segment).where(Segment.status == SegmentStatus.TRANSCRIBING.value).limit(3)
+                stmt = select(Segment).where(Segment.status == SegmentStatus.TRANSCRIBED.value).limit(3)
                 segments = (await db.execute(stmt)).scalars().all()
 
             for seg in segments:
@@ -73,10 +73,10 @@ async def render_loop():
     while not _shutdown_event.is_set():
         try:
             async with AsyncSessionLocal() as db:
-                # Render shortlisted candidates with score >= 75
+                # Strictly render candidates that meet or exceed the viral threshold
                 stmt = select(Candidate).where(
                     (Candidate.status == CandidateStatus.DETECTED.value) &
-                    (Candidate.score >= 75.0)
+                    (Candidate.score >= settings.VIRAL_SCORE_THRESHOLD)
                 ).limit(2)
                 candidates = (await db.execute(stmt)).scalars().all()
 

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, Radio, RefreshCw, Trash2, CheckCircle2, AlertCircle, Shield, ExternalLink } from 'lucide-react';
+import { Plus, Radio, RefreshCw, Trash2, CheckCircle2, AlertCircle, Shield, ExternalLink, Flame } from 'lucide-react';
 import { Streamer } from '../types';
 
 interface StreamersViewProps {
   streamers: Streamer[];
   onAddStreamer: (data: any) => Promise<void>;
   onCheckLive: (id: number) => Promise<void>;
+  onInstantCapture?: (id: number) => Promise<void>;
   onDeleteStreamer: (id: number) => Promise<void>;
   onUpdatePermission: (id: number, data: any) => Promise<void>;
 }
@@ -14,12 +15,14 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
   streamers,
   onAddStreamer,
   onCheckLive,
+  onInstantCapture,
   onDeleteStreamer,
   onUpdatePermission,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStreamerForPerm, setSelectedStreamerForPerm] = useState<Streamer | null>(null);
   const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [capturingId, setCapturingId] = useState<number | null>(null);
 
   // Form states for adding streamer
   const [platform, setPlatform] = useState<'twitch' | 'youtube'>('twitch');
@@ -69,6 +72,19 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
     }
   };
 
+  const handleInstantCapture = async (id: number) => {
+    if (!onInstantCapture) return;
+    setCapturingId(id);
+    try {
+      await onInstantCapture(id);
+      alert('Capture initiated! The 60-second slice has been recorded, transcribed, and evaluated through the viral filter.');
+    } catch (err: any) {
+      alert(err.message || 'Capture slice failed');
+    } finally {
+      setCapturingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -85,6 +101,22 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
           <Plus className="w-4 h-4" />
           Add Streamer
         </button>
+      </div>
+
+      {/* Virality Modulation Info Banner */}
+      <div className="p-4 rounded-2xl bg-vice-card border border-vice-border flex items-start gap-3 text-xs">
+        <Flame className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div className="font-bold text-white flex items-center gap-2">
+            <span>Strict Virality Modulation Active</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              Min Viral Score: 85/100
+            </span>
+          </div>
+          <p className="text-slate-400">
+            To prevent flooding storage and the publishing queue with boring clips, every 10-minute segment is strictly filtered. Only moments with crazy reactions, intense police pursuits, or hilarious actions score 85+ and get clipped. Standard cruising or casual chat produces zero clips.
+          </p>
+        </div>
       </div>
 
       {/* Streamers Table / Card Grid */}
@@ -158,15 +190,30 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
               </div>
 
               {/* Actions Footer */}
-              <div className="flex items-center justify-between pt-2 border-t border-vice-border/60">
-                <button
-                  onClick={() => handleCheck(s.id)}
-                  disabled={checkingId === s.id}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-vice-dark hover:bg-vice-hover border border-vice-border transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${checkingId === s.id ? 'animate-spin' : ''}`} />
-                  Check Live
-                </button>
+              <div className="flex items-center justify-between pt-2 border-t border-vice-border/60 gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCheck(s.id)}
+                    disabled={checkingId === s.id}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-vice-dark hover:bg-vice-hover border border-vice-border transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${checkingId === s.id ? 'animate-spin' : ''}`} />
+                    Check Live
+                  </button>
+
+                  {isLive && onInstantCapture && (
+                    <button
+                      onClick={() => handleInstantCapture(s.id)}
+                      disabled={capturingId === s.id}
+                      className="flex items-center gap-1.5 text-xs font-bold text-vice-cyan hover:text-white px-2.5 py-1.5 rounded-lg bg-vice-cyan/10 hover:bg-vice-cyan/20 border border-vice-cyan/30 transition-all disabled:opacity-50"
+                      title="Test live capture: records a 60-second slice, transcribes, tests viral filter, and generates vertical clip"
+                    >
+                      <Radio className={`w-3 h-3 ${capturingId === s.id ? 'animate-pulse text-vice-pink' : ''}`} />
+                      {capturingId === s.id ? 'Capturing 60s...' : 'Capture 60s Slice'}
+                    </button>
+                  )}
+                </div>
+
                 <button
                   onClick={() => {
                     if (confirm(`Remove ${s.display_name} from monitored streamers?`)) {

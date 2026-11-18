@@ -177,6 +177,70 @@ async def trigger_live_check(
     streamer.viewer_count = live_info.get("viewers", 0)
     streamer.last_checked_at = datetime.now(timezone.utc)
 
+    # If stream is live, ensure capture session is started
+    if live_info["is_live"]:
+        from workers.capture_worker import capture_worker
+        if streamer.id not in capture_worker.active_processes:
+            await capture_worker.start_capture_session(db, streamer)
+
     await db.commit()
     await db.refresh(streamer)
     return streamer
+
+
+@router.post("/{streamer_id}/capture-now")
+async def trigger_instant_capture(
+    streamer_id: int,
+    duration: int = 60,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_current_user)
+):
+    """
+    On-demand capture test: records an immediate slice (default 60s) of the live stream,
+    transcribes it, runs the strict virality filter, and renders a split-screen vertical clip.
+    """
+    stmt = select(Streamer).where(Streamer.id == streamer_id)
+    streamer = (await db.execute(stmt)).scalar_one_or_none()
+    if not streamer:
+        raise HTTPException(status_code=404, detail="Streamer not found")
+
+    from workers.capture_worker import capture_worker
+    from workers.transcription_worker import transcription_worker
+    from workers.candidate_worker import candidate_worker
+    from workers.render_worker import render_worker
+    from workers.storage_worker import storage_worker
+    from packages.shared.config import settings
+
+    # 1. Capture slice
+    segment = await capture_worker.capture_sample_now(db, streamer, duration_seconds=duration)
+    if not segment:
+        raise HTTPException(status_code=500, detail="Failed to capture stream slice. Please verify stream is live.")
+
+    # 2. Transcribe
+    transcript = await transcription_worker.process_segment(segment.id)
+    if not transcript:
+        raise HTTPException(status_code=500, detail="Audio transcription failed.")
+
+    # 3. Score for virality (filtered by settings.VIRAL_SCORE_THRESHOLD)
+    candidates = await candidate_worker.process_segment_candidates(segment.id)
+
+    # 4. Render viral clips
+    rendered_clips = []
+    for cand in candidates:
+        if cand.score >= settings.VIRAL_SCORE_THRESHOLD:
+            clip = await render_worker.render_candidate_to_clip(cand.id)
+            if clip:
+                await storage_worker.upload_clip_to_r2(clip.id)
+                rendered_clips.append(clip.id)
+
+    return {
+        "status": "success",
+        "streamer": streamer.display_name,
+        "segment_id": segment.id,
+        "duration_seconds": duration,
+        "transcribed_text_preview": transcript.text[:120],
+        "viral_candidates_count": len(candidates),
+        "clips_rendered_count": len(rendered_clips),
+        "clip_ids": rendered_clips,
+        "viral_threshold_used": settings.VIRAL_SCORE_THRESHOLD
+    }
