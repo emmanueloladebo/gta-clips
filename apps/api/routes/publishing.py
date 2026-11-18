@@ -36,6 +36,55 @@ async def list_destinations(
     return result.scalars().all()
 
 
+@router.post("/destinations/sync", response_model=List[DestinationAccountResponse])
+async def sync_zernio_destinations(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_current_user)
+):
+    """
+    Fetch all connected social accounts from Zernio and sync them into destination accounts.
+    """
+    remote_accounts = await zernio_adapter.get_connected_accounts()
+    synced: List[DestinationAccount] = []
+
+    for item in remote_accounts:
+        stmt = select(DestinationAccount).where(
+            (DestinationAccount.platform == item["platform"]) &
+            (DestinationAccount.external_account_id == item["external_account_id"])
+        )
+        existing = (await db.execute(stmt)).scalar_one_or_none()
+        if existing:
+            existing.account_name = item["account_name"]
+            existing.is_active = item.get("is_active", True)
+            synced.append(existing)
+        else:
+            new_acc = DestinationAccount(
+                platform=item["platform"],
+                account_name=item["account_name"],
+                external_account_id=item["external_account_id"],
+                is_active=item.get("is_active", True),
+                auto_post_enabled=False,
+            )
+            db.add(new_acc)
+            synced.append(new_acc)
+
+    await db.commit()
+    for acc in synced:
+        await db.refresh(acc)
+
+    db.add(AuditEvent(
+        actor=user.username,
+        action="sync_zernio_accounts",
+        target_type="destination_account",
+        target_id=str(len(synced)),
+        details_json={"count": len(synced)}
+    ))
+    await db.commit()
+
+    all_stmt = select(DestinationAccount).order_by(DestinationAccount.id.asc())
+    return (await db.execute(all_stmt)).scalars().all()
+
+
 @router.post("/destinations", response_model=DestinationAccountResponse, status_code=status.HTTP_201_CREATED)
 async def create_destination(
     payload: DestinationAccountCreate,

@@ -66,3 +66,15 @@ async def test_zernio_status_polling():
     status_data = await adapter.get_publish_status(post["id"])
     assert status_data["id"] == post["id"]
     assert status_data["status"] in ["published", "scheduled", "processing"]
+
+
+@pytest.mark.asyncio
+async def test_zernio_get_connected_accounts():
+    adapter = ZernioAdapter()
+    adapter.mock_mode = True
+
+    accounts = await adapter.get_connected_accounts()
+    assert len(accounts) >= 2
+    platforms = [a["platform"] for a in accounts]
+    assert "tiktok" in platforms
+    assert "youtube_shorts" in platforms

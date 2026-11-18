@@ -24,29 +24,53 @@ class FFmpegRenderWorker:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.watermark_text = settings.WATERMARK_TEXT
 
-    def build_ffmpeg_filter(self, streamer_name: str, quote_text: str) -> str:
+    def build_ffmpeg_filter(
+        self,
+        streamer_name: str,
+        quote_text: str,
+        headline_text: str = "",
+        facecam_pos: str = "top_right"
+    ) -> str:
         """
-        Creates an FFmpeg complex filter:
-        1. Scales and blurs background to fill 1080x1920 portrait.
-        2. Centers the 16:9 gameplay footage on top.
-        3. Adds source attribution watermark and caption.
+        Creates an FFmpeg complex filter for viral split-screen vertical video:
+        1. Top: Streamer facecam cropped and scaled to 1080x760.
+        2. Bottom: Main GTA 6 gameplay cropped and scaled to 1080x1160.
+        3. Middle Divider: Dynamic AI headline banner with bold high-contrast text.
+        4. Attribution watermark at top and spoken subtitles at bottom.
         """
-        escaped_attribution = f"@{streamer_name} | GTA 6".replace("'", "\\'").replace(":", "\\:")
-        clean_quote = quote_text[:60].replace("'", "\\'").replace(":", "\\:")
+        escaped_streamer = streamer_name.replace("'", "\\'").replace(":", "\\:")
+        clean_headline = (headline_text or "GTA 6 HIGHLIGHT").upper().replace("'", "\\'").replace(":", "\\:")
+        clean_quote = quote_text[:70].replace("'", "\\'").replace(":", "\\:")
+
+        # Crop parameters for facecam based on typical streamer overlay layouts
+        if facecam_pos == "top_left":
+            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=0"
+        elif facecam_pos == "bottom_right":
+            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58"
+        elif facecam_pos == "bottom_left":
+            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58"
+        elif facecam_pos == "center_zoom":
+            crop_cam = "crop=w=iw*0.45:h=ih*0.5:x=iw*0.27:y=0"
+        else:  # top_right default
+            crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0"
 
         filter_complex = (
-            # Split input into background and foreground
-            "[0:v]split=2[bg_raw][fg_raw];"
-            # Background: scale to fill 1080x1920, blur heavily
-            "[bg_raw]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];"
-            # Foreground: scale to 1080 wide, maintain aspect ratio
-            "[fg_raw]scale=1080:-1[fg];"
-            # Overlay centered
-            "[bg][fg]overlay=(W-w)/2:(H-h)/2[composite];"
-            # Attribution watermark at top
-            f"[composite]drawtext=text='{escaped_attribution}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=180:box=1:boxcolor=black@0.6:boxborderw=10[watermarked];"
-            # Subtitle banner at bottom
-            f"[watermarked]drawtext=text='{clean_quote}':fontsize=40:fontcolor=yellow:x=(w-text_w)/2:y=1550:shadowcolor=black:shadowx=3:shadowy=3[final_v]"
+            # 1. Split stream into facecam feed and gameplay feed
+            "[0:v]split=2[raw_cam][raw_game];"
+            # 2. Crop streamer facecam and scale to 1080x760
+            f"[raw_cam]{crop_cam},scale=1080:760:force_original_aspect_ratio=increase,crop=1080:760[facecam];"
+            # 3. Scale & crop gameplay to 1080x1160
+            "[raw_game]scale=2062:1160:force_original_aspect_ratio=increase,crop=1080:1160[gameplay];"
+            # 4. Vertical stack: Facecam on top, gameplay on bottom (total 1080x1920)
+            "[facecam][gameplay]vstack=inputs=2[stacked];"
+            # 5. Middle headline banner dividing bar (y = 715 to 805)
+            "[stacked]drawbox=y=715:w=1080:h=90:color=black@0.85:t=fill[bannered];"
+            # 6. Headline text overlay
+            f"[bannered]drawtext=text='{clean_headline}':fontsize=36:fontcolor=yellow:x=(w-text_w)/2:y=742:shadowcolor=black:shadowx=2:shadowy=2[headlined];"
+            # 7. Watermark attribution banner at top
+            f"[headlined]drawtext=text='@{escaped_streamer} | GTA 6':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=24:box=1:boxcolor=black@0.6:boxborderw=6[watermarked];"
+            # 8. Spoken caption/subtitle near bottom of gameplay
+            f"[watermarked]drawtext=text='{clean_quote}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=1640:box=1:boxcolor=black@0.7:boxborderw=8[final_v]"
         )
         return filter_complex
 
@@ -57,10 +81,17 @@ class FFmpegRenderWorker:
         duration_sec: float,
         output_file: str,
         streamer_name: str,
-        quote_text: str
+        quote_text: str,
+        headline_text: str = "",
+        facecam_pos: str = "top_right"
     ) -> bool:
         """Execute FFmpeg command to produce 1080x1920 H.264/AAC MP4."""
-        filter_str = self.build_ffmpeg_filter(streamer_name, quote_text)
+        filter_str = self.build_ffmpeg_filter(
+            streamer_name=streamer_name,
+            quote_text=quote_text,
+            headline_text=headline_text,
+            facecam_pos=facecam_pos
+        )
         cmd = [
             "ffmpeg", "-y",
             "-ss", str(start_sec),
@@ -144,13 +175,36 @@ class FFmpegRenderWorker:
             start_sec = max(0.0, candidate.start_second - 3.0)
             duration_sec = candidate.duration_seconds + (candidate.start_second - start_sec)
 
+            # Extract AI headline, caption, and hashtags from metadata if present
+            meta = candidate.safety_flags if isinstance(candidate.safety_flags, dict) else {}
+            headline = meta.get("headline") or candidate.hook_summary.upper()
+            caption = meta.get("caption") or candidate.why_highlight
+            raw_hashtags = meta.get("hashtags") or ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"]
+            facecam_pos = meta.get("facecam_position") or "top_right"
+
+            # Enforce maximum 5 hashtags in lowercase, guaranteeing #gta and #gta6
+            tags_list = []
+            for tag in raw_hashtags:
+                t = tag.strip().lower()
+                if not t.startswith("#"):
+                    t = f"#{t}"
+                if t not in tags_list:
+                    tags_list.append(t)
+            if "#gta" not in tags_list:
+                tags_list.insert(0, "#gta")
+            if "#gta6" not in tags_list:
+                tags_list.insert(1, "#gta6")
+            final_tags = " ".join(tags_list[:5])
+
             self.render_vertical_clip(
                 input_file=segment.file_path,
                 start_sec=start_sec,
                 duration_sec=duration_sec,
                 output_file=clip_path,
                 streamer_name=streamer_name,
-                quote_text=candidate.evidence_quote
+                quote_text=candidate.evidence_quote,
+                headline_text=headline,
+                facecam_pos=facecam_pos
             )
 
             self.generate_thumbnail(
@@ -166,9 +220,9 @@ class FFmpegRenderWorker:
             clip = Clip(
                 candidate_id=candidate.id,
                 streamer_id=session.streamer_id,
-                title=candidate.hook_summary,
-                description=f"{candidate.why_highlight}\n\nStreamed by {streamer_name}",
-                tags="#GTA6 #Gaming #Shorts #GrandTheftAuto",
+                title=headline,
+                description=f"{caption}\n\nStreamed by {streamer_name}",
+                tags=final_tags,
                 portrait_video_path=clip_path,
                 thumbnail_path=thumb_path,
                 duration_seconds=duration_sec,

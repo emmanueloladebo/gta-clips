@@ -40,14 +40,21 @@ Rules:
 2. Include 5 to 15 seconds of lead-in context before the climax.
 3. Provide scores from 0 to 100 for overall quality, excitement, and clarity.
 4. Quote the exact spoken words as evidence.
-5. Identify any safety flags (dmca_music, extreme_profanity, etc.).
-6. Output MUST strictly adhere to the JSON schema below.
+5. Provide a punchy 'headline' (3-6 words, uppercase, e.g. "WHEN 5 STARS HIT AT ONCE 🚁") to place as the middle headline banner on the vertical video.
+6. Write a natural, conversational 'caption' for TikTok (simple words, no big english).
+7. Provide a 'hashtags' list of at most 5 lowercase hashtags, always including "#gta" and "#gta6" (e.g. ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"]).
+8. Estimate streamer facecam position: "top_right", "top_left", "bottom_left", or "bottom_right".
+9. Output MUST strictly adhere to the JSON schema below.
 
 JSON Schema:
 {{
   "highlights": [
     {{
       "hook_summary": "Short catchy title (5-10 words)",
+      "headline": "WHEN 5 STARS HIT AT ONCE 🚁",
+      "caption": "Bro had zero chance escaping this five star chase!",
+      "hashtags": ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"],
+      "facecam_position": "top_right",
       "start_second": 10.0,
       "end_second": 40.0,
       "duration_seconds": 30.0,
@@ -118,6 +125,10 @@ Respond with valid JSON only. Do not add markdown backticks outside JSON."""
         return [
             HighlightCandidateScoring(
                 hook_summary="Car flips twice and lands on the roof",
+                headline="INSANE DOUBLE FLIP ESCAPE 🚗💨",
+                caption="I cannot believe this car flip actually worked during the escape!",
+                hashtags=["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"],
+                facecam_position="top_right",
                 start_second=20.0,
                 end_second=48.0,
                 duration_seconds=28.0,
@@ -132,6 +143,10 @@ Respond with valid JSON only. Do not add markdown backticks outside JSON."""
             ),
             HighlightCandidateScoring(
                 hook_summary="Helicopter flies under the Vice City bridge",
+                headline="FIVE STAR HELICOPTER STUNT 🚁🔥",
+                caption="Bro really pulled off this bridge flight under 5 stars!",
+                hashtags=["#gta", "#gta6", "#gaming", "#gtavice", "#viral"],
+                facecam_position="top_right",
                 start_second=25.0,
                 end_second=42.0,
                 duration_seconds=17.0,
@@ -206,7 +221,13 @@ Respond with valid JSON only. Do not add markdown backticks outside JSON."""
                     hook_summary=h.hook_summary,
                     why_highlight=h.why_highlight,
                     evidence_quote=h.evidence_quote,
-                    safety_flags=h.safety_flags,
+                    safety_flags={
+                        "flags": h.safety_flags if isinstance(h.safety_flags, list) else [],
+                        "headline": h.headline or h.hook_summary.upper(),
+                        "caption": h.caption or h.why_highlight,
+                        "hashtags": h.hashtags or ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"],
+                        "facecam_position": h.facecam_position or "top_right",
+                    },
                     visual_score=h.visual_score if self.vision_enabled else None,
                     visual_description=h.visual_description if self.vision_enabled else None,
                     status=CandidateStatus.DETECTED.value,

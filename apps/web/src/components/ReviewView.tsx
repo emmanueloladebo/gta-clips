@@ -11,6 +11,7 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
   const [selectedClipId, setSelectedClipId] = useState<number | null>(clips[0]?.id || null);
   const [filter, setFilter] = useState<'pending_review' | 'approved' | 'rejected' | 'all'>('pending_review');
   const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [editTags, setEditTags] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -24,7 +25,8 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
   const handleSelectClip = (clip: Clip) => {
     setSelectedClipId(clip.id);
     setEditTitle(clip.title);
-    setEditTags(clip.tags || '#GTA6 #Gaming #Shorts');
+    setEditDescription(clip.description || '');
+    setEditTags(clip.tags || '#gta #gta6 #gaming #gtaclips #viral');
   };
 
   const handleApprove = async () => {
@@ -33,6 +35,7 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
     try {
       await onReviewClip(activeClip.id, 'approve', {
         custom_title: editTitle || activeClip.title,
+        custom_description: editDescription || activeClip.description,
         custom_tags: editTags || activeClip.tags,
       });
     } catch (err: any) {
@@ -197,30 +200,49 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
                 <div className="space-y-4 text-xs">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Highlight Title
+                      Video Headline Banner (Middle Bar)
                     </span>
                     <input
                       type="text"
                       value={editTitle || activeClip.title}
                       onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="e.g. WHEN 5 STARS HIT AT ONCE 🚁"
                       className="w-full mt-1 px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white text-xs font-semibold focus:outline-none focus:border-vice-pink"
                     />
                   </div>
 
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Hashtags
+                      Post Caption (TikTok / Socials)
+                    </span>
+                    <textarea
+                      rows={2}
+                      value={editDescription !== '' ? editDescription : (activeClip.description || '')}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      placeholder="Short natural hook for the post"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white text-xs focus:outline-none focus:border-vice-pink resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Trending Hashtags (Max 5, lowercase)
                     </span>
                     <input
                       type="text"
-                      value={editTags || activeClip.tags || '#GTA6 #Gaming #Shorts'}
+                      value={editTags || activeClip.tags || '#gta #gta6 #gaming #gtaclips #viral'}
                       onChange={(e) => setEditTags(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white text-xs focus:outline-none focus:border-vice-pink"
+                      placeholder="#gta #gta6 #gaming #gtaclips #viral"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white text-xs focus:outline-none focus:border-vice-pink font-mono"
                     />
                   </div>
 
                   {/* Highlights Spec Card */}
                   <div className="p-3.5 rounded-xl bg-vice-dark border border-vice-border space-y-2">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span>Video Layout:</span>
+                      <span className="font-semibold text-vice-cyan">Facecam Top + Gameplay Bottom</span>
+                    </div>
                     <div className="flex items-center justify-between text-slate-300">
                       <span>Aspect Ratio:</span>
                       <span className="font-semibold text-white">9:16 (1080x1920)</span>

@@ -171,6 +171,10 @@ class TranscriptResponse(BaseModel):
 class HighlightCandidateScoring(BaseModel):
     """Schema expected back from Groq LLM scoring."""
     hook_summary: str = Field(..., description="Short catchy hook for the clip, 5-10 words")
+    headline: Optional[str] = Field(default=None, description="Punchy headline banner text for split-screen video, 3-7 words")
+    caption: Optional[str] = Field(default=None, description="Engaging, natural TikTok caption (1-2 sentences)")
+    hashtags: Optional[List[str]] = Field(default_factory=lambda: ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"], description="Max 5 lowercase trending GTA 6 hashtags")
+    facecam_position: Optional[str] = Field(default="top_right", description="Quadrant of streamer facecam: top_right, top_left, bottom_left, bottom_right, or center_zoom")
     start_second: float = Field(..., description="Start timestamp relative to segment in seconds")
     end_second: float = Field(..., description="End timestamp relative to segment in seconds")
     duration_seconds: float = Field(..., description="Total length between 15 and 60 seconds")

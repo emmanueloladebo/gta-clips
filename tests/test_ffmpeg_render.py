@@ -17,22 +17,28 @@ def test_ffmpeg_filter_construction():
     worker = FFmpegRenderWorker()
     streamer_name = "SpeedDemon"
     quote = "No way the car flipped twice!"
+    headline = "INSANE DOUBLE FLIP"
 
-    filter_str = worker.build_ffmpeg_filter(streamer_name, quote)
+    filter_str = worker.build_ffmpeg_filter(streamer_name, quote, headline_text=headline)
 
-    # 1. 1080x1920 background crop & blur
-    assert "scale=1080:1920" in filter_str
-    assert "boxblur=" in filter_str
+    # 1. Top facecam crop and scale
+    assert "scale=1080:760" in filter_str
 
-    # 2. Centered foreground overlay
-    assert "scale=1080:-1" in filter_str
-    assert "overlay=(W-w)/2:(H-h)/2" in filter_str
+    # 2. Bottom gameplay crop and scale
+    assert "scale=2062:1160" in filter_str
 
-    # 3. Streamer attribution watermark
+    # 3. Vertical stack
+    assert "vstack=inputs=2" in filter_str
+
+    # 4. Middle headline banner
+    assert "drawbox=y=715:w=1080:h=90" in filter_str
+    assert "INSANE DOUBLE FLIP" in filter_str
+
+    # 5. Streamer attribution watermark
     assert "@SpeedDemon" in filter_str
     assert "GTA 6" in filter_str
 
-    # 4. Burned subtitle
+    # 6. Burned subtitle
     assert "No way the car flipped twice!" in filter_str
 
 

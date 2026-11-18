@@ -82,6 +82,8 @@ export const api = {
 
   // Publishing
   getDestinations: () => request<DestinationAccount[]>('/publishing/destinations'),
+  syncZernioDestinations: () =>
+    request<DestinationAccount[]>('/publishing/destinations/sync', { method: 'POST' }),
   addDestination: (data: any) =>
     request<DestinationAccount>('/publishing/destinations', { method: 'POST', body: JSON.stringify(data) }),
   getPublishJobs: () => request<PublishJob[]>('/publishing/jobs'),

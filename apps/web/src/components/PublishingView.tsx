@@ -8,6 +8,7 @@ interface PublishingViewProps {
   clips: Clip[];
   autoPostEnabled: boolean;
   onAddDestination: (data: any) => Promise<void>;
+  onSyncZernio?: () => Promise<void>;
   onPublishClip: (clipId: number, destId: number) => Promise<void>;
   onRetryJob: (jobId: number) => Promise<void>;
 }
@@ -18,14 +19,16 @@ export const PublishingView: React.FC<PublishingViewProps> = ({
   clips,
   autoPostEnabled,
   onAddDestination,
+  onSyncZernio,
   onPublishClip,
   onRetryJob,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [platform, setPlatform] = useState('youtube_shorts');
+  const [platform, setPlatform] = useState('tiktok');
   const [accountName, setAccountName] = useState('');
   const [externalId, setExternalId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [retryingId, setRetryingId] = useState<number | null>(null);
 
   // Manual publish modal
@@ -82,6 +85,18 @@ export const PublishingView: React.FC<PublishingViewProps> = ({
     }
   };
 
+  const handleSyncZernio = async () => {
+    if (!onSyncZernio) return;
+    setIsSyncing(true);
+    try {
+      await onSyncZernio();
+    } catch (err: any) {
+      alert(err.message || 'Syncing Zernio accounts failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -93,6 +108,17 @@ export const PublishingView: React.FC<PublishingViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {onSyncZernio && (
+            <button
+              onClick={handleSyncZernio}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-vice-dark hover:bg-vice-hover border border-vice-cyan/40 text-xs font-semibold text-vice-cyan disabled:opacity-50 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Sync Zernio Accounts'}
+            </button>
+          )}
+
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-vice-dark hover:bg-vice-hover border border-vice-border text-xs font-semibold text-slate-300"

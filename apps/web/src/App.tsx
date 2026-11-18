@@ -114,6 +114,11 @@ export const App: React.FC = () => {
     await fetchData();
   };
 
+  const handleSyncZernio = async () => {
+    await api.syncZernioDestinations();
+    await fetchData();
+  };
+
   const handlePublishClip = async (clipId: number, destId: number) => {
     await api.publishClip(clipId, destId);
     await fetchData();
@@ -180,6 +185,7 @@ export const App: React.FC = () => {
               clips={clips}
               autoPostEnabled={autoPostEnabled}
               onAddDestination={handleAddDestination}
+              onSyncZernio={handleSyncZernio}
               onPublishClip={handlePublishClip}
               onRetryJob={handleRetryJob}
             />
