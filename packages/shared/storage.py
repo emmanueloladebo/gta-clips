@@ -54,7 +54,13 @@ class StorageManager:
                         total_size += p.stat().st_size
                     except OSError:
                         pass
-        return total_size, self.scratch_limit
+        # Dynamically inspect disk filesystem capacity (matching 60 GB EBS volume)
+        try:
+            total_disk = shutil.disk_usage(str(self.scratch_dir)).total
+            limit = max(self.scratch_limit, total_disk)
+        except Exception:
+            limit = self.scratch_limit
+        return total_size, limit
 
     def get_r2_usage(self) -> Tuple[int, int]:
         """Returns (estimated_used_bytes, object_count)."""

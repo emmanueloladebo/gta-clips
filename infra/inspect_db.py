@@ -15,7 +15,8 @@ async def main():
         candidates = cres.scalars().all()
         print(f"\nTotal recent candidates: {len(candidates)}")
         for c in candidates:
-            print(f"Candidate ID {c.id}: score={c.score}, headline='{c.headline}', hook='{c.hook_summary}', quote='{c.evidence_quote}'")
+            headline = (c.safety_flags or {}).get("headline", "N/A") if isinstance(c.safety_flags, dict) else "N/A"
+            print(f"Candidate ID {c.id}: score={c.score}, headline='{headline}', hook='{c.hook_summary}', quote='{c.evidence_quote}'")
 
         clip_res = await db.execute(select(Clip).order_by(Clip.id.desc()).limit(5))
         clips = clip_res.scalars().all()

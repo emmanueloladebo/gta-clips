@@ -30,45 +30,48 @@ class GroqCandidateWorker:
         self.max_retries = 3
 
     def build_prompt(self, transcript_text: str, duration_seconds: float) -> str:
-        """Construct bounded prompt requesting strict JSON schema output with strict virality gate."""
-        return f"""You are an elite, highly selective viral video editor and curator for Grand Theft Auto VI.
-Analyze the following transcript from a {duration_seconds:.0f}-second video segment.
+        """Construct bounded prompt requesting schema-validated viral clip detection with deep GTA 6 context."""
+        return f"""You are an elite, creative viral video editor and curator specialized in Grand Theft Auto VI (GTA 6).
+Analyze the following transcript from a {duration_seconds:.0f}-second livestream segment.
 
-CRITICAL VIRALITY RULE:
-You must be EXTREMELY SELECTIVE. Most 10-minute gaming segments do NOT have viral moments.
-If this segment is just standard driving, casual talk, routine gameplay, or ordinary combat with no exceptional climax, DO NOT FORCE A CLIP. Return an empty array:
-{{"highlights": []}}
+YOUR MISSION:
+Find the most entertaining, hilarious, intense, scandalous, or memorable moment in this transcript that will perform well on TikTok, YouTube Shorts, and Instagram Reels.
 
-ONLY return a highlight if it is a genuine 9/10 or 10/10 viral moment (e.g. insane heist escape, hilarious glitch, uncontrollable streamer reaction, 5-star police chaos).
-Any highlight returned must have a score >= 85.0.
+DEEP GTA 6 KNOWLEDGE & VIBES:
+Do NOT limit your search to just 5-star police chases. GTA 6 in the state of Leonida (Vice City) is full of crazy, diverse moments:
+- Lucia and Jason dynamics: romantic tension, banter, relationship drama, ex-partners, arguments, trust and crime partnership.
+- Vice City nightlife: Lucia dancing at clubs, partying, wild NPCs, twerking on car roofs, beach antics, luxury lifestyle.
+- Stunts and chaos: stealing fighter jets from the military base, crazy car ramps, speedboat chases in the Keys, airboats in the swamp with alligators, robbing stores, weapon experiments.
+- Funny Florida/Leonida humor: bizarre NPC interactions, hilarious dialogue, weird radio broadcasts, ridiculous social media moments.
+- Streamer reactions: funny jokes, roasts, laughing, screaming, unexpected fails, clutch saves, genuine shock or hype.
+- Random fun banter: any conversation or moment that is funny, weird, or interesting to watch!
 
-Rules:
-1. Each clip must be between 15 and 60 seconds total length.
-2. Include 5 to 15 seconds of lead-in context before the climax.
-3. Provide scores from 0 to 100 for overall quality, excitement, and clarity. Only give >= 85 if truly viral.
-4. Quote the exact spoken words as evidence.
-5. Provide a punchy 'headline' (3-6 words, uppercase, e.g. "WHEN 5 STARS HIT AT ONCE 🚁") to place as the middle headline banner on the vertical video.
-6. Write a natural, conversational 'caption' for TikTok (simple words, no big english).
-7. Provide a 'hashtags' list of at most 5 lowercase hashtags, always including "#gta" and "#gta6" (e.g. ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"]).
-8. Estimate streamer facecam position: "top_right", "top_left", "bottom_left", or "bottom_right".
-9. Output MUST strictly adhere to the JSON schema below.
+RULES:
+1. If there is a fun, interesting, funny, or action-packed moment in the transcript, extract the best 15 to 60-second clip window.
+2. Only return an empty list {{"highlights": []}} if the transcript is completely empty, unintelligible noise, or pure silence.
+3. Provide a score between 70 and 100 based on entertainment value, humor, or excitement.
+4. Provide a punchy, click-worthy 'headline' in uppercase (3-6 words, e.g. "LUCIA DANCING AT THE CLUB 💃", "STEALING A MILITARY JET ✈️", "JASON'S WORST DECISION EVER 😂", "BRO ACCIDENTALLY JUMPED THE BRIDGE 💀").
+5. Write a natural, conversational 'caption' for social media (simple, everyday words - no big english or robotic prose).
+6. Provide up to 5 lowercase hashtags, always including "#gta" and "#gta6" (e.g. ["#gta", "#gta6", "#gaming", "#gtavice", "#viral"]).
+7. Quote the exact spoken words from the transcript as evidence.
+8. Output MUST strictly adhere to the JSON schema below.
 
 JSON Schema:
 {{
   "highlights": [
     {{
-      "hook_summary": "Short catchy title (5-10 words)",
-      "headline": "WHEN 5 STARS HIT AT ONCE 🚁",
-      "caption": "Bro had zero chance escaping this five star chase!",
-      "hashtags": ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"],
+      "hook_summary": "Catchy clip title (5-10 words)",
+      "headline": "LUCIA CAUGHT DANCING AT THE CLUB 💃",
+      "caption": "Jason was not ready for this in Vice City!",
+      "hashtags": ["#gta", "#gta6", "#gaming", "#gtavice", "#viral"],
       "facecam_position": "top_right",
-      "start_second": 10.0,
-      "end_second": 40.0,
+      "start_second": 5.0,
+      "end_second": 35.0,
       "duration_seconds": 30.0,
-      "score": 92.5,
-      "excitement_score": 95.0,
-      "clarity_score": 88.0,
-      "why_highlight": "Natural explanation of why this moment is fun or intense",
+      "score": 88.0,
+      "excitement_score": 90.0,
+      "clarity_score": 85.0,
+      "why_highlight": "Funny and entertaining dialogue/moment",
       "evidence_quote": "Exact transcript text",
       "safety_flags": []
     }}

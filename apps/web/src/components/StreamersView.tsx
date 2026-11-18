@@ -108,13 +108,13 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
         <Flame className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <div className="font-bold text-white flex items-center gap-2">
-            <span>Strict Virality Modulation Active</span>
+            <span>Smart Virality Detection Active</span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              Min Viral Score: 85/100
+              Min Viral Score: 75/100
             </span>
           </div>
           <p className="text-slate-400">
-            To prevent flooding storage and the publishing queue with boring clips, every 10-minute segment is strictly filtered. Only moments with crazy reactions, intense police pursuits, or hilarious actions score 85+ and get clipped. Standard cruising or casual chat produces zero clips.
+            Our AI continuously clips entertaining, funny, and chaotic GTA 6 moments — including Lucia and Jason relationship drama, nightclub dancing, military jet stunts, funny banter, unexpected fails, and streamer reactions.
           </p>
         </div>
       </div>
