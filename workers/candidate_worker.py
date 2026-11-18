@@ -84,9 +84,14 @@ Transcript:
 Respond with valid JSON only. Do not add markdown backticks outside JSON."""
 
     async def score_transcript(self, transcript_text: str, duration_seconds: float) -> List[HighlightCandidateScoring]:
-        """Call Groq API or return schema-validated mock highlights."""
+        """Call Groq API to extract viral highlight moments."""
+        if not transcript_text or not transcript_text.strip():
+            logger.info("Empty transcript text provided. No highlights to extract.")
+            return []
+
         if self.mock_mode:
-            return self._generate_mock_highlights(duration_seconds)
+            logger.warning("Groq API key not configured. Skipping candidate scoring.")
+            return []
 
         prompt = self.build_prompt(transcript_text, duration_seconds)
         headers = {
@@ -118,15 +123,17 @@ Respond with valid JSON only. Do not add markdown backticks outside JSON."""
                         await asyncio.sleep(delay)
                         delay *= 2
                     else:
+                        logger.error(f"Groq API returned error status {resp.status_code}: {resp.text}")
                         resp.raise_for_status()
             except Exception as e:
+                logger.warning(f"Groq scoring attempt {attempt+1}/{self.max_retries} failed: {e}")
                 if attempt == self.max_retries - 1:
-                    # Graceful fallback so pipeline never crashes if provider has model 404
-                    return self._generate_mock_highlights(duration_seconds)
+                    logger.error(f"All Groq scoring attempts failed for segment: {e}")
+                    return []
                 await asyncio.sleep(delay)
                 delay *= 2
 
-        return self._generate_mock_highlights(duration_seconds)
+        return []
 
     def _generate_mock_highlights(self, duration_seconds: float) -> List[HighlightCandidateScoring]:
         """Realistic mock candidates matching the JSON schema."""

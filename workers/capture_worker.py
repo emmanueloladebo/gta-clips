@@ -51,6 +51,11 @@ class CaptureWorker:
 
     async def check_and_capture_streamers(self) -> None:
         """Poll monitored streamers and manage capture lifecycles."""
+        # Prune dead/finished capture processes
+        dead_ids = [sid for sid, proc in self.active_processes.items() if proc.poll() is not None]
+        for sid in dead_ids:
+            del self.active_processes[sid]
+
         # Check scratch disk backpressure
         scratch_used, scratch_limit = storage_manager.get_scratch_usage()
         if scratch_used >= scratch_limit:
@@ -79,7 +84,8 @@ class CaptureWorker:
 
                     if is_now_live:
                         if streamer.id not in self.active_processes:
-                            await self.start_capture_session(db, streamer)
+                            if len(self.active_processes) < settings.MAX_CONCURRENT_STREAMS:
+                                await self.start_capture_session(db, streamer)
                     elif not is_now_live and (was_live or streamer.id in self.active_processes):
                         await self.stop_capture_session(db, streamer)
 

@@ -51,6 +51,7 @@ class ApprovalStatus(str, Enum):
     PENDING_REVIEW = "pending_review"
     APPROVED = "approved"
     REJECTED = "rejected"
+    PUBLISHED = "published"
 
 
 class PublishStatus(str, Enum):

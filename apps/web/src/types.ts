@@ -44,7 +44,7 @@ export interface Clip {
   file_size_bytes: number;
   resolution: string;
   aspect_ratio: string;
-  approval_status: 'pending_review' | 'approved' | 'rejected';
+  approval_status: 'pending_review' | 'approved' | 'rejected' | 'published';
   auto_post_eligible: boolean;
   created_at: string;
   expires_at: string;

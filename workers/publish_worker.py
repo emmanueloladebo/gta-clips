@@ -13,6 +13,7 @@ from packages.shared.config import settings
 from packages.shared.database import AsyncSessionLocal
 from packages.shared.models import Clip, CreatorPermission, DestinationAccount, PublishJob, AuditEvent
 from packages.shared.enums import ApprovalStatus, PermissionStatus, PublishStatus
+from packages.shared.storage import storage_manager
 from packages.shared.zernio import zernio_adapter
 
 
@@ -125,11 +126,22 @@ class AutoPublishWorker:
                         caption=f"{clip.title}\n\n{clip.tags or ''}",
                         platforms=[dest.platform],
                         idempotency_key=job.idempotency_key,
+                        account_id=dest.external_account_id,
+                        title=clip.title,
                         scheduled_at=job.scheduled_at
                     )
                     job.external_post_id = res.get("id")
                     job.status = PublishStatus.PUBLISHED.value if not job.scheduled_at else PublishStatus.QUEUED.value
                     job.published_at = datetime.now(timezone.utc) if not job.scheduled_at else None
+
+                    # Once confirmed posted, clean up video and thumbnail storage from both scratch and Cloudflare R2
+                    if job.status == PublishStatus.PUBLISHED.value:
+                        clip.approval_status = ApprovalStatus.PUBLISHED.value
+                        try:
+                            storage_manager.cleanup_clip_media(clip)
+                        except Exception:
+                            pass
+
                     processed += 1
                 except Exception as e:
                     job.status = PublishStatus.FAILED.value

@@ -21,6 +21,7 @@ from packages.shared.schemas import (
     PublishJobCreate, PublishJobResponse
 )
 from packages.shared.zernio import zernio_adapter
+from packages.shared.storage import storage_manager
 from apps.api.auth import require_current_user
 
 router = APIRouter(prefix="/api/publishing", tags=["publishing"])
@@ -197,12 +198,22 @@ async def publish_clip(
             caption=f"{clip.title}\n\n{clip.tags or ''}",
             platforms=[dest.platform],
             idempotency_key=idempotency_key,
+            account_id=dest.external_account_id,
+            title=clip.title,
             scheduled_at=payload.scheduled_at
         )
 
         job.external_post_id = zernio_res.get("id")
         job.status = PublishStatus.PUBLISHED.value if not payload.scheduled_at else PublishStatus.QUEUED.value
         job.published_at = datetime.now(timezone.utc) if not payload.scheduled_at else None
+
+        # Once confirmed published, clean up media files from scratch disk and Cloudflare R2
+        if job.status == PublishStatus.PUBLISHED.value:
+            clip.approval_status = ApprovalStatus.PUBLISHED.value
+            try:
+                storage_manager.cleanup_clip_media(clip)
+            except Exception:
+                pass
 
         db.add(AuditEvent(
             actor=user.username,
@@ -250,12 +261,20 @@ async def retry_publish_job(
             caption=f"{clip.title}\n\n{clip.tags or ''}",
             platforms=[dest.platform],
             idempotency_key=job.idempotency_key,
+            account_id=dest.external_account_id,
+            title=clip.title,
             scheduled_at=job.scheduled_at
         )
         job.external_post_id = zernio_res.get("id")
         job.status = PublishStatus.PUBLISHED.value if not job.scheduled_at else PublishStatus.QUEUED.value
         job.error_message = None
         job.retry_count += 1
+        if job.status == PublishStatus.PUBLISHED.value:
+            clip.approval_status = ApprovalStatus.PUBLISHED.value
+            try:
+                storage_manager.cleanup_clip_media(clip)
+            except Exception:
+                pass
     except Exception as e:
         job.status = PublishStatus.FAILED.value
         job.error_message = str(e)

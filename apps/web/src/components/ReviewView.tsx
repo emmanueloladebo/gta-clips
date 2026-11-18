@@ -9,7 +9,7 @@ interface ReviewViewProps {
 
 export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) => {
   const [selectedClipId, setSelectedClipId] = useState<number | null>(clips[0]?.id || null);
-  const [filter, setFilter] = useState<'pending_review' | 'approved' | 'rejected' | 'all'>('pending_review');
+  const [filter, setFilter] = useState<'pending_review' | 'approved' | 'published' | 'rejected' | 'all'>('pending_review');
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editTags, setEditTags] = useState('');
@@ -69,7 +69,7 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
         </div>
 
         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-vice-card border border-vice-border text-xs font-semibold">
-          {(['pending_review', 'approved', 'rejected', 'all'] as const).map((tab) => (
+          {(['pending_review', 'approved', 'published', 'rejected', 'all'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
@@ -104,6 +104,7 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
             {filteredClips.map((clip) => {
               const isSelected = activeClip?.id === clip.id;
               const isApproved = clip.approval_status === 'approved';
+              const isPublished = clip.approval_status === 'published';
               const isRejected = clip.approval_status === 'rejected';
 
               return (
@@ -140,7 +141,9 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
                       <div className="flex items-center justify-between gap-2">
                         <span
                           className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                            isApproved
+                            isPublished
+                              ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                              : isApproved
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                               : isRejected
                               ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'

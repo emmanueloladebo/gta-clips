@@ -205,5 +205,42 @@ class StorageManager:
 
         return deleted_count
 
+    def cleanup_clip_media(self, clip) -> Dict[str, bool]:
+        """
+        Deletes a clip's video and thumbnail files from local scratch disk
+        and from Cloudflare R2 when posted or rejected.
+        """
+        results = {"local_video": False, "local_thumbnail": False, "r2_video": False, "r2_thumbnail": False}
+
+        # Local portrait video
+        if getattr(clip, "portrait_video_path", None):
+            try:
+                p = Path(clip.portrait_video_path)
+                if p.exists() and p.is_file():
+                    p.unlink()
+                    results["local_video"] = True
+            except Exception:
+                pass
+
+        # Local thumbnail
+        if getattr(clip, "thumbnail_path", None):
+            try:
+                p = Path(clip.thumbnail_path)
+                if p.exists() and p.is_file():
+                    p.unlink()
+                    results["local_thumbnail"] = True
+            except Exception:
+                pass
+
+        # Cloudflare R2 video
+        if getattr(clip, "r2_key", None):
+            results["r2_video"] = self.delete_from_r2(clip.r2_key)
+
+        # Cloudflare R2 thumbnail
+        if getattr(clip, "r2_thumbnail_key", None):
+            results["r2_thumbnail"] = self.delete_from_r2(clip.r2_thumbnail_key)
+
+        return results
+
 
 storage_manager = StorageManager()

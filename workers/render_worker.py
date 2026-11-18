@@ -93,14 +93,55 @@ class FFmpegRenderWorker:
         facecam_pos: str = "top_right",
         crop_cam: Optional[str] = None
     ) -> bool:
-        """Execute FFmpeg command to produce 1080x1920 H.264/AAC MP4."""
-        filter_str = self.build_ffmpeg_filter(
-            streamer_name=streamer_name,
-            quote_text=quote_text,
-            headline_text=headline_text,
-            facecam_pos=facecam_pos,
-            crop_cam=crop_cam
+        """Execute FFmpeg command to produce 1080x1920 H.264/AAC MP4 using external text files."""
+        temp_dir = self.output_dir / "tmp_text"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        unique_prefix = f"render_{int(datetime.now(timezone.utc).timestamp()*1000)}_{os.getpid()}"
+
+        headline_file = temp_dir / f"{unique_prefix}_headline.txt"
+        watermark_file = temp_dir / f"{unique_prefix}_watermark.txt"
+        sub_file = temp_dir / f"{unique_prefix}_sub.txt"
+
+        clean_headline = (headline_text or "GTA 6 HIGHLIGHT").upper()
+        clean_streamer = f"@{streamer_name} | GTA 6"
+        clean_quote = (quote_text or "")[:80]
+
+        headline_file.write_text(clean_headline, encoding="utf-8")
+        watermark_file.write_text(clean_streamer, encoding="utf-8")
+        sub_file.write_text(clean_quote, encoding="utf-8")
+
+        # In FFmpeg, escape colon and backslash in textfile path
+        h_path = str(headline_file).replace("\\", "/").replace(":", "\\:")
+        w_path = str(watermark_file).replace("\\", "/").replace(":", "\\:")
+        s_path = str(sub_file).replace("\\", "/").replace(":", "\\:")
+
+        if not crop_cam or not crop_cam.startswith("crop="):
+            if facecam_pos == "top_left":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=0"
+            elif facecam_pos == "middle_left":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.28"
+            elif facecam_pos == "bottom_right":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58"
+            elif facecam_pos == "bottom_left":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58"
+            elif facecam_pos == "middle_right":
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.28"
+            elif facecam_pos == "top_center" or facecam_pos == "center_zoom":
+                crop_cam = "crop=w=iw*0.42:h=ih*0.45:x=iw*0.29:y=0"
+            else:  # top_right default
+                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0"
+
+        filter_str = (
+            "[0:v]split=2[raw_cam][raw_game];"
+            f"[raw_cam]{crop_cam},scale=1080:760:force_original_aspect_ratio=increase,crop=1080:760[facecam];"
+            "[raw_game]scale=2062:1160:force_original_aspect_ratio=increase,crop=1080:1160[gameplay];"
+            "[facecam][gameplay]vstack=inputs=2[stacked];"
+            "[stacked]drawbox=y=715:w=1080:h=90:color=black@0.85:t=fill[bannered];"
+            f"[bannered]drawtext=textfile='{h_path}':fontsize=36:fontcolor=yellow:x=(w-text_w)/2:y=742:shadowcolor=black:shadowx=2:shadowy=2[headlined];"
+            f"[headlined]drawtext=textfile='{w_path}':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=24:box=1:boxcolor=black@0.6:boxborderw=6[watermarked];"
+            f"[watermarked]drawtext=textfile='{s_path}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=1640:box=1:boxcolor=black@0.7:boxborderw=8[final_v]"
         )
+
         cmd = [
             "ffmpeg", "-y",
             "-ss", str(start_sec),
@@ -109,7 +150,7 @@ class FFmpegRenderWorker:
             "-filter_complex", filter_str,
             "-map", "[final_v]",
             "-map", "0:a?",
-            "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",  # EBU R128 audio normalization
+            "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-b:v", settings.RENDER_BITRATE,
@@ -120,16 +161,19 @@ class FFmpegRenderWorker:
         ]
 
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
-            if res.returncode == 0 and Path(output_file).exists():
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=240)
+            if res.returncode == 0 and Path(output_file).exists() and Path(output_file).stat().st_size > 50000:
                 return True
+            return False
         except Exception:
-            pass
-
-        # Fallback simulation if ffmpeg is missing in local test environment
-        out_path = Path(output_file)
-        out_path.write_bytes(b"\x00" * (1024 * 500))  # 500 KB mock MP4
-        return True
+            return False
+        finally:
+            for tf in (headline_file, watermark_file, sub_file):
+                if tf.exists():
+                    try:
+                        tf.unlink()
+                    except Exception:
+                        pass
 
     def generate_thumbnail(self, video_file: str, output_thumb: str, at_second: float = 1.0) -> bool:
         """Extract high-resolution 1080x1920 thumbnail JPEG."""
@@ -143,13 +187,11 @@ class FFmpegRenderWorker:
         ]
         try:
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
-            if res.returncode == 0 and Path(output_thumb).exists():
+            if res.returncode == 0 and Path(output_thumb).exists() and Path(output_thumb).stat().st_size > 1000:
                 return True
         except Exception:
             pass
-
-        Path(output_thumb).write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 1024)
-        return True
+        return False
 
     async def render_candidate_to_clip(self, candidate_id: int) -> Optional[Clip]:
         """Convert an approved candidate into a vertical 9:16 clip."""
@@ -211,7 +253,7 @@ class FFmpegRenderWorker:
                 preferred_position=facecam_pos
             )
 
-            self.render_vertical_clip(
+            rendered = self.render_vertical_clip(
                 input_file=segment.file_path,
                 start_sec=start_sec,
                 duration_sec=duration_sec,
@@ -222,6 +264,9 @@ class FFmpegRenderWorker:
                 facecam_pos=detected_region,
                 crop_cam=crop_cam
             )
+
+            if not rendered or not Path(clip_path).exists() or Path(clip_path).stat().st_size < 50000:
+                return None
 
             self.generate_thumbnail(
                 video_file=clip_path,

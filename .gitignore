@@ -16,6 +16,7 @@ data/
 # Environment secrets
 .env
 .env.local
+infra/*.py
 
 # OS files
 .DS_Store
