@@ -30,11 +30,13 @@ class DeepgramTranscriptionWorker:
         self.scratch_audio_dir.mkdir(parents=True, exist_ok=True)
 
     def extract_audio(self, video_path: str, output_path: str) -> bool:
-        """Extract 16kHz mono audio from video segment to minimize bandwidth."""
+        """Extract 16kHz mono audio from video segment with vocal isolation filter."""
         try:
             cmd = [
                 "ffmpeg", "-y", "-i", video_path,
-                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+                "-vn",
+                "-af", "highpass=f=80,lowpass=f=7500,volume=1.4",
+                "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
                 output_path
             ]
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
@@ -45,6 +47,7 @@ class DeepgramTranscriptionWorker:
     async def transcribe_audio_file(self, audio_path: str, duration_seconds: float = 600.0) -> Dict[str, Any]:
         """
         Call Deepgram API with exponential backoff on 429 / 5xx errors.
+        Uses Nova-3 model with keyterm domain boosting and speaker diarization.
         """
         if self.mock_mode:
             # Generate realistic timestamp-aligned transcript for GTA 6
@@ -54,13 +57,26 @@ class DeepgramTranscriptionWorker:
             "Authorization": f"Token {self.api_key}",
             "Content-Type": "audio/wav"
         }
-        params = {
-            "model": self.model,
-            "smart_format": "true",
-            "punctuate": "true",
-            "diarize": "true",
-            "utterances": "true",
-        }
+        params = [
+            ("model", self.model or "nova-3"),
+            ("smart_format", "true"),
+            ("punctuate", "true"),
+            ("diarize", "true"),
+            ("utterances", "true"),
+            ("filler_words", "true"),
+            ("keyterm", "Lucia"),
+            ("keyterm", "Jason"),
+            ("keyterm", "Vice City"),
+            ("keyterm", "GTA 6"),
+            ("keyterm", "Leonida"),
+            ("keyterm", "military base"),
+            ("keyterm", "five star"),
+            ("keyterm", "heist"),
+            ("keyterm", "cops"),
+            ("keyterm", "opps"),
+            ("keyterm", "busted"),
+            ("keyterm", "wasted"),
+        ]
 
         audio_bytes = Path(audio_path).read_bytes()
         delay = 1.0
@@ -91,29 +107,55 @@ class DeepgramTranscriptionWorker:
         raise RuntimeError("Deepgram transcription failed: max retries exceeded.")
 
     def _parse_deepgram_response(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract text and word-level timestamps from Deepgram response."""
+        """Extract text, word-level timestamps, and speaker utterances from Deepgram Nova-3 response."""
         channels = data.get("results", {}).get("channels", [])
         if not channels:
-            return {"text": "", "words": [], "sound_events": []}
+            return {"text": "", "words": [], "utterances": [], "sound_events": []}
 
         alt = channels[0].get("alternatives", [{}])[0]
         text = alt.get("transcript", "")
         words = alt.get("words", [])
 
-        # Format words
+        # Format words with speaker and confidence
         formatted_words = [
             {
                 "word": w.get("word", ""),
                 "start": float(w.get("start", 0.0)),
                 "end": float(w.get("end", 0.0)),
-                "confidence": float(w.get("confidence", 0.0))
+                "confidence": float(w.get("confidence", 0.0)),
+                "speaker": int(w.get("speaker", 0)) if "speaker" in w else 0,
             }
             for w in words
+        ]
+
+        # Extract timestamped utterances from Deepgram Nova-3
+        raw_utterances = data.get("results", {}).get("utterances", [])
+        if not raw_utterances and "paragraphs" in alt:
+            paragraphs = alt.get("paragraphs", {}).get("paragraphs", [])
+            for p in paragraphs:
+                for sent in p.get("sentences", []):
+                    raw_utterances.append({
+                        "start": sent.get("start", 0.0),
+                        "end": sent.get("end", 0.0),
+                        "transcript": sent.get("text", ""),
+                        "speaker": p.get("speaker", 0)
+                    })
+
+        formatted_utterances = [
+            {
+                "start": float(u.get("start", 0.0)),
+                "end": float(u.get("end", 0.0)),
+                "speaker": int(u.get("speaker", 0)),
+                "text": str(u.get("transcript", "")).strip()
+            }
+            for u in raw_utterances
+            if str(u.get("transcript", "")).strip()
         ]
 
         return {
             "text": text,
             "words": formatted_words,
+            "utterances": formatted_utterances,
             "sound_events": []
         }
 
@@ -149,9 +191,16 @@ class DeepgramTranscriptionWorker:
             {"event": "cheering", "start": 122.0, "end": 125.0, "confidence": 0.89}
         ]
 
+        mock_utterances = [
+            {"start": start, "end": end, "speaker": 0, "text": phrase}
+            for start, end, phrase in phrases
+            if start < duration_seconds
+        ]
+
         return {
             "text": " ".join(full_text_list),
             "words": all_words,
+            "utterances": mock_utterances,
             "sound_events": sound_events
         }
 
@@ -180,7 +229,7 @@ class DeepgramTranscriptionWorker:
                     segment_id=segment.id,
                     text=result["text"],
                     words_json=result["words"],
-                    sound_events_json=result.get("sound_events", []),
+                    sound_events_json=result.get("utterances", []),
                     provider="deepgram" if not self.mock_mode else "deepgram_mock"
                 )
                 segment.status = SegmentStatus.TRANSCRIBED.value

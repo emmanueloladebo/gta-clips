@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # Audio Transcription (Deepgram)
     DEEPGRAM_API_KEY: str = ""
-    DEEPGRAM_MODEL: str = "nova-2"
+    DEEPGRAM_MODEL: str = "nova-3"
     DEEPGRAM_BASE_URL: str = "https://api.deepgram.com/v1"
 
     # AI Highlight Scorer (Groq LLM)

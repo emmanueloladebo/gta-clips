@@ -229,7 +229,20 @@ Respond with valid JSON only."""
             if not transcript or not transcript.text:
                 return []
 
-            raw_highlights = await self.score_transcript(transcript.text, segment.duration_seconds)
+            # Format timestamped utterances from Deepgram Nova-3 if available
+            scoring_text = transcript.text
+            if transcript.sound_events_json and isinstance(transcript.sound_events_json, list):
+                dialogue_lines = []
+                for item in transcript.sound_events_json:
+                    if isinstance(item, dict) and "start" in item and "text" in item and item["text"]:
+                        s_m, s_s = divmod(int(item["start"]), 60)
+                        e_m, e_s = divmod(int(item.get("end", item["start"])), 60)
+                        spk = item.get("speaker", 0)
+                        dialogue_lines.append(f"[{s_m:02d}:{s_s:02d} - {e_m:02d}:{e_s:02d}] (Speaker {spk}): {item['text']}")
+                if dialogue_lines:
+                    scoring_text = "\n".join(dialogue_lines)
+
+            raw_highlights = await self.score_transcript(scoring_text, segment.duration_seconds)
             deduped = self.deduplicate_candidates(raw_highlights)
 
             # Strict Virality Gate: only moments meeting or exceeding the viral threshold are saved

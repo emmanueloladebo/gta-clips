@@ -17,7 +17,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ health }) => {
     {
       name: 'Deepgram Audio Intelligence',
       description: 'Transcribes speech and identifies hype moments',
-      status: 'Active (Nova-2 model)',
+      status: 'Active (Nova-3 model)',
       envVar: 'DEEPGRAM_API_KEY',
     },
     {
