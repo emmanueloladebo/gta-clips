@@ -202,7 +202,13 @@ async def publish_clip(
 
     try:
         # Submit to Zernio
-        media_url = clip.r2_url or f"{settings.PUBLIC_BASE_URL}/api/clips/mock-media/{clip.r2_key}"
+        # Ensure fresh 24-hour presigned URL is generated so it never expires during publishing
+        if clip.r2_key:
+            media_url = storage_manager.generate_presigned_url(clip.r2_key, expires_in_seconds=86400)
+            clip.r2_url = media_url
+        else:
+            media_url = clip.r2_url or f"{settings.PUBLIC_BASE_URL}/api/clips/mock-media/{clip.r2_key}"
+
         post_caption = clip.description if clip.description else f"{clip.title}\n\n{clip.tags or ''}"
         zernio_res = await zernio_adapter.submit_publish_job(
             media_url=media_url,
@@ -266,12 +272,21 @@ async def retry_publish_job(
         raise HTTPException(status_code=400, detail="Associated clip or destination missing")
 
     try:
-        media_url = clip.r2_url or f"{settings.PUBLIC_BASE_URL}/api/clips/mock-media/{clip.r2_key}"
+        # Refresh 24h presigned URL for retry
+        if clip.r2_key:
+            media_url = storage_manager.generate_presigned_url(clip.r2_key, expires_in_seconds=86400)
+            clip.r2_url = media_url
+        else:
+            media_url = clip.r2_url or f"{settings.PUBLIC_BASE_URL}/api/clips/mock-media/{clip.r2_key}"
+
+        post_caption = clip.description if clip.description else f"{clip.title}\n\n{clip.tags or ''}"
+        retry_key = f"{job.idempotency_key}_retry_{job.retry_count + 1}"
+
         zernio_res = await zernio_adapter.submit_publish_job(
             media_url=media_url,
-            caption=f"{clip.title}\n\n{clip.tags or ''}",
+            caption=post_caption,
             platforms=[dest.platform],
-            idempotency_key=job.idempotency_key,
+            idempotency_key=retry_key,
             account_id=dest.external_account_id,
             title=clip.title,
             scheduled_at=job.scheduled_at

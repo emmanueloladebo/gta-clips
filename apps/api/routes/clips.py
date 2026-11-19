@@ -163,12 +163,18 @@ async def re_render_clip_endpoint(
     Updates local scratch video, uploads fresh MP4 to Cloudflare R2, and refreshes preview URL.
     """
     from workers.render_worker import render_worker
-    clip = await render_worker.re_render_clip(clip_id, payload.headline)
-    if not clip:
+    re_rendered = await render_worker.re_render_clip(clip_id, payload.headline)
+    if not re_rendered:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to re-render clip. Source segment may have expired or is missing."
+            detail="Failed to re-render clip. Source video or segment may have expired or is missing."
         )
+
+    # Re-query clip in the current route session to prevent detached session error
+    stmt = select(Clip).where(Clip.id == clip_id)
+    clip = (await db.execute(stmt)).scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
 
     if payload.caption is not None:
         clip.description = payload.caption

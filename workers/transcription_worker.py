@@ -220,11 +220,43 @@ class DeepgramTranscriptionWorker:
             if not extracted or not Path(audio_file).exists() or Path(audio_file).stat().st_size < 1000:
                 segment.status = SegmentStatus.FAILED.value
                 segment.error_message = "Audio extraction failed or audio stream absent"
+                raw_p = Path(segment.file_path)
+                if raw_p.exists():
+                    try:
+                        raw_p.unlink()
+                    except Exception:
+                        pass
+                segment.disk_bytes = 0
                 await db.commit()
                 return None
 
             try:
                 result = await self.transcribe_audio_file(audio_file, segment.duration_seconds)
+                transcript_text = result["text"].strip()
+
+                # Silence Auto-Purge: if segment has no speech/dialogue, purge raw video immediately to save scratch disk
+                if len(transcript_text) < 10:
+                    logger.info(f"Segment {segment.id} has no speech/dialogue (silence). Purging raw video to save scratch disk.")
+                    raw_p = Path(segment.file_path)
+                    if raw_p.exists():
+                        try:
+                            raw_p.unlink()
+                        except Exception:
+                            pass
+                    segment.disk_bytes = 0
+                    segment.status = SegmentStatus.SCORED.value  # Mark completed so candidate worker skips it
+
+                    transcript = Transcript(
+                        segment_id=segment.id,
+                        text="",
+                        words_json=[],
+                        sound_events_json=[],
+                        provider="deepgram" if not self.mock_mode else "deepgram_mock"
+                    )
+                    db.add(transcript)
+                    await db.commit()
+                    return transcript
+
                 transcript = Transcript(
                     segment_id=segment.id,
                     text=result["text"],
@@ -248,6 +280,14 @@ class DeepgramTranscriptionWorker:
             except Exception as e:
                 segment.status = SegmentStatus.FAILED.value
                 segment.error_message = f"Transcription error: {str(e)}"
+                await db.commit()
+                return None
+            finally:
+                if Path(audio_file).exists():
+                    try:
+                        Path(audio_file).unlink()
+                    except Exception:
+                        pass
                 await db.commit()
                 return None
             finally:

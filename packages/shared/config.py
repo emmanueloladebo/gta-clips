@@ -71,7 +71,7 @@ class Settings(BaseSettings):
 
     # Retention & Capture Rules
     MEDIA_TTL_HOURS: int = 24  # Hard 24h retention policy
-    SEGMENT_SECONDS: int = 600  # 10 minutes per segment
+    SEGMENT_SECONDS: int = 300  # 5 minutes per segment (faster clip turnaround & lower disk footprint)
     MAX_CONCURRENT_STREAMS: int = 3
     AUTO_POST_ENABLED: bool = False  # Review-before-post default
     VIRAL_SCORE_THRESHOLD: float = 65.0  # Captures viral moments, missions, unhinged NPCs, and gameplay chaos (0-100)

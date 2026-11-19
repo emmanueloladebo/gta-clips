@@ -92,7 +92,13 @@ class GroqCandidateWorker:
         self.vision_model_id = settings.VISION_MODEL_ID
         self.max_retries = 3
 
-    def build_prompt(self, transcript_text: str, duration_seconds: float, recent_headlines: Optional[List[str]] = None) -> str:
+    def build_prompt(
+        self,
+        transcript_text: str,
+        duration_seconds: float,
+        recent_headlines: Optional[List[str]] = None,
+        streamer_name: str = "Player"
+    ) -> str:
         """Construct prompt requesting high-converting viral hooks matching Vice City Snips quality."""
         banned_section = ""
         if recent_headlines:
@@ -104,35 +110,48 @@ Do NOT use or closely imitate any of these existing headlines:
 Every new headline must be 100% fresh, creative, and strictly specific to what happened in THIS clip.
 """
 
+        clean_name = streamer_name.strip() or "Player"
+        clean_upper = clean_name.upper()
+
         return f"""You are a top viral TikTok/Shorts content curator specialized in Grand Theft Auto VI (GTA 6).
 Analyze this transcript from a {duration_seconds:.0f}-second livestream segment.
 
+STREAMER NAME RULE (MANDATORY):
+- The streamer's display name is "{clean_name}".
+- NEVER use the generic word "Streamer" in any headline or caption! (e.g. NEVER write "STREAMER GETS RILED UP" or "STREAMER'S RESET RANT" or "STREAMER CONFUSED").
+- ALWAYS use the streamer's actual display name "{clean_name}" or "{clean_upper}" (or in-game character names Jason/Lucia/NPCs).
+- Examples for {clean_name}:
+  * "{clean_upper} GETS RILED UP IN GTA 6 😡💥"
+  * "{clean_upper} CONFUSED ABOUT PS5 😂"
+  * "{clean_upper}'S HILARIOUS RESET RANT 😂"
+  * "{clean_name} thought this was GTA 5 😭💀 The military wasn't playing!"
+
 YOUR OBJECTIVE:
-Find the single most captivating, intense, shocking, or hilarious moment in this segment.
-Deeply analyze dialogue, streamer reactions, scenario, and gameplay context:
+Find the top 1 to 3 distinct, non-overlapping captivating, intense, shocking, or hilarious moments in this segment.
+Deeply analyze dialogue, {clean_name}'s reactions, scenario, and gameplay context:
 - Missions & base break-ins (stealing a fighter jet from the military base, plane crashes in swamps, boat escapes).
 - Unhinged NPCs & dialogue (talking parrots that roast people, almost getting banned by weird NPCs, pedestrians, random crimes).
 - Game mechanics & discoveries (new gym systems, building muscle, comparing police AI to GTA 5, weird weapons like tennis balls).
-- Streamer panic, chaos, roasts, laughing, scream reactions, unexpected fails.
+- {clean_name} panic, chaos, roasts, laughing, scream reactions, unexpected fails.
 
 HEADLINE ON-SCREEN RULES:
 - Must be a punchy, curiosity-inducing hook (4 to 9 words in UPPERCASE) with 1-2 relevant emojis at the end.
 - It must accurately describe the exact scenario/dialogue in the video!
-- NEVER give generic titles like "HEAD CLIPPERS FAIL" or "JASON & LUCIA CHAOS". Make every title unique and descriptive.
+- NEVER use the word "STREAMER" or generic titles like "HEAD CLIPPERS FAIL".
 - Perfect headline examples:
   * "STEALING A JET IN GTA 6 IS A DEATH SENTENCE 💀✈️"
   * "GTA 6 HAS A TALKING PARROT THAT ROASTS YOU 😭🦜"
-  * "THIS GTA 6 NPC ALMOST GOT HIM BANNED 💀"
+  * "{clean_upper} ALMOST GOT BANNED BY THIS NPC 💀"
   * "I FOUND A CRASHED PLANE IN GTA 6… BIG MISTAKE 💀"
   * "TRYING TO SNEAK ONTO A CRUISE SHIP IN GTA 6 💀"
   * "GTA 6 COPS ARE WAY SMARTER THAN GTA 5 COPS"
   * "BRO REALLY USED A TENNIS BALL AS A WEAPON 😭"
   * "YOU CAN ACTUALLY BUILD MUSCLE IN GTA 6?!"
-  * "I JUST WITNESSED A RANDOM MURDER IN GTA 6 💀"
+  * "{clean_upper} GETS AMBUSHED IN THE SWAMP 💀"
 {banned_section}
 CAPTION RULES:
 - Write a short, natural social caption (1 sentence, everyday words - no big english):
-  * "Bro thought this was GTA 5 😭💀 The military wasn't playing!"
+  * "{clean_name} thought this was GTA 5 😭💀 The military wasn't playing!"
   * "This parrot has absolutely NO FILTER 😭🦜💀"
   * "I thought stealing a police boat would SAVE me 💀"
 
@@ -150,9 +169,9 @@ JSON SCHEMA:
 {{
   "highlights": [
     {{
-      "hook_summary": "Catchy 4-7 word title",
-      "headline": "STEALING A JET IN GTA 6 IS A DEATH SENTENCE 💀✈️",
-      "caption": "Bro thought this was GTA 5 😭💀 The military wasn't playing!",
+      "hook_summary": "Catchy 4-7 word title using {clean_name}",
+      "headline": "{clean_upper} INFILTRATES THE MILITARY BASE 💀✈️",
+      "caption": "{clean_name} thought this was GTA 5 😭💀 The military wasn't playing!",
       "hashtags": ["#gta6", "#gtavi", "#gaming", "#vicecity", "#gta6gameplay"],
       "facecam_position": "top_right",
       "start_second": 185.0,
@@ -161,7 +180,7 @@ JSON SCHEMA:
       "score": 92.0,
       "excitement_score": 94.0,
       "clarity_score": 90.0,
-      "why_highlight": "Streamer infiltrates the military base and gets surrounded by tanks.",
+      "why_highlight": "{clean_name} infiltrates the military base and gets surrounded by tanks.",
       "evidence_quote": "Exact spoken words from transcript",
       "safety_flags": []
     }}
@@ -239,7 +258,13 @@ Respond with valid JSON only."""
                 delay *= 2
         return []
 
-    async def score_transcript(self, transcript_text: str, duration_seconds: float, recent_headlines: Optional[List[str]] = None) -> List[HighlightCandidateScoring]:
+    async def score_transcript(
+        self,
+        transcript_text: str,
+        duration_seconds: float,
+        recent_headlines: Optional[List[str]] = None,
+        streamer_name: str = "Player"
+    ) -> List[HighlightCandidateScoring]:
         """
         Extract viral highlight moments.
         Uses 9router (openai/gpt-6-luna) as primary engine.
@@ -249,7 +274,12 @@ Respond with valid JSON only."""
             logger.info("Empty transcript text provided. No highlights to extract.")
             return []
 
-        prompt = self.build_prompt(transcript_text, duration_seconds, recent_headlines=recent_headlines)
+        prompt = self.build_prompt(
+            transcript_text,
+            duration_seconds,
+            recent_headlines=recent_headlines,
+            streamer_name=streamer_name
+        )
 
         # 1. Primary: 9router (openai/gpt-6-luna)
         if self.router_api_key:
@@ -358,10 +388,23 @@ Respond with valid JSON only."""
     async def process_segment_candidates(self, segment_id: int) -> List[Candidate]:
         """Extract and persist highlight candidates for a segment."""
         async with AsyncSessionLocal() as db:
-            stmt = select(Segment).where(Segment.id == segment_id)
-            segment = (await db.execute(stmt)).scalar_one_or_none()
-            if not segment:
-                return []
+            # Fetch segment and streamer display name
+            stmt = (
+                select(Segment, Streamer.display_name)
+                .join(StreamSession, Segment.session_id == StreamSession.id)
+                .join(Streamer, StreamSession.streamer_id == Streamer.id)
+                .where(Segment.id == segment_id)
+            )
+            res = (await db.execute(stmt)).first()
+            if not res:
+                seg_stmt = select(Segment).where(Segment.id == segment_id)
+                segment = (await db.execute(seg_stmt)).scalar_one_or_none()
+                if not segment:
+                    return []
+                streamer_name = "Player"
+            else:
+                segment, streamer_display_name = res
+                streamer_name = (streamer_display_name or "Player").strip()
 
             # Fetch transcript
             trans_stmt = select(Transcript).where(Transcript.segment_id == segment_id)
@@ -390,11 +433,30 @@ Respond with valid JSON only."""
             recent_clips = (await db.execute(select(Clip.title).order_by(Clip.id.desc()).limit(15))).scalars().all()
             all_recent = list(set([h for h in (recent_cands + recent_clips) if h]))
 
-            raw_highlights = await self.score_transcript(scoring_text, segment.duration_seconds, recent_headlines=all_recent)
+            raw_highlights = await self.score_transcript(
+                scoring_text,
+                segment.duration_seconds,
+                recent_headlines=all_recent,
+                streamer_name=streamer_name
+            )
             deduped = self.deduplicate_candidates(raw_highlights)
 
             # Strict Virality Gate: only moments meeting or exceeding the viral threshold are saved
             viral_highlights = [h for h in deduped if h.score >= settings.VIRAL_SCORE_THRESHOLD]
+
+            # If 0 viral moments scored, purge the raw video immediately to free up scratch disk
+            if not viral_highlights:
+                logger.info(f"Segment {segment.id} has 0 viral highlights (score >= {settings.VIRAL_SCORE_THRESHOLD}). Purging raw video to save scratch disk.")
+                raw_p = Path(segment.file_path)
+                if raw_p.exists():
+                    try:
+                        raw_p.unlink()
+                    except Exception:
+                        pass
+                segment.disk_bytes = 0
+
+            clean_name = streamer_name
+            clean_upper = streamer_name.upper()
 
             db_candidates = []
             for h in viral_highlights:
@@ -409,6 +471,22 @@ Respond with valid JSON only."""
 
                 precise_duration = round(precise_end - precise_start, 1)
 
+                # Ensure streamer name is used instead of generic "STREAMER"
+                hl = (h.headline or h.hook_summary or f"{clean_upper} IN GTA 6").strip()
+                hl = re.sub(r'\bSTREAMER\b', clean_upper, hl, flags=re.IGNORECASE)
+                hl = re.sub(r'\bStreamer\b', clean_name, hl)
+                hl = re.sub(r'\bstreamer\b', clean_name, hl)
+
+                cap = (h.caption or h.why_highlight or "").strip()
+                cap = re.sub(r'\bSTREAMER\b', clean_upper, cap, flags=re.IGNORECASE)
+                cap = re.sub(r'\bStreamer\b', clean_name, cap)
+                cap = re.sub(r'\bstreamer\b', clean_name, cap)
+
+                why_hl = (h.why_highlight or "").strip()
+                why_hl = re.sub(r'\bSTREAMER\b', clean_upper, why_hl, flags=re.IGNORECASE)
+                why_hl = re.sub(r'\bStreamer\b', clean_name, why_hl)
+                why_hl = re.sub(r'\bstreamer\b', clean_name, why_hl)
+
                 # Dedupe key based on segment and time window
                 time_key = f"{segment.id}_{int(precise_start)}_{int(precise_end)}"
                 dedupe_hash = hashlib.sha256(time_key.encode()).hexdigest()[:16]
@@ -421,13 +499,13 @@ Respond with valid JSON only."""
                     score=h.score,
                     excitement_score=h.excitement_score,
                     clarity_score=h.clarity_score,
-                    hook_summary=h.hook_summary,
-                    why_highlight=h.why_highlight,
+                    hook_summary=hl,
+                    why_highlight=why_hl,
                     evidence_quote=h.evidence_quote,
                     safety_flags={
                         "flags": h.safety_flags if isinstance(h.safety_flags, list) else [],
-                        "headline": h.headline or h.hook_summary.upper(),
-                        "caption": h.caption or h.why_highlight,
+                        "headline": hl,
+                        "caption": cap,
                         "hashtags": h.hashtags or ["#gta", "#gta6", "#gaming", "#gtaclips", "#viral"],
                         "facecam_position": h.facecam_position or "top_right",
                     },

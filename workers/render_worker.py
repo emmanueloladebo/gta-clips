@@ -245,6 +245,17 @@ class FFmpegRenderWorker:
             else:
                 formatted_caption = clean_caption
 
+            clean_name = (streamer.display_name or "Player").strip()
+            clean_upper = clean_name.upper()
+
+            headline = re.sub(r'\bSTREAMER\b', clean_upper, headline, flags=re.IGNORECASE)
+            headline = re.sub(r'\bStreamer\b', clean_name, headline)
+            headline = re.sub(r'\bstreamer\b', clean_name, headline)
+
+            formatted_caption = re.sub(r'\bSTREAMER\b', clean_upper, formatted_caption, flags=re.IGNORECASE)
+            formatted_caption = re.sub(r'\bStreamer\b', clean_name, formatted_caption)
+            formatted_caption = re.sub(r'\bstreamer\b', clean_name, formatted_caption)
+
             final_tags = "#gta6 #gtavi #gaming #vicecity #gta6gameplay"
             full_description = f"{formatted_caption}\n\n{final_tags}"
 
@@ -259,7 +270,7 @@ class FFmpegRenderWorker:
                 start_sec=start_sec,
                 duration_sec=duration_sec,
                 output_file=clip_path,
-                streamer_name=streamer_name,
+                streamer_name=clean_name,
                 quote_text="",
                 headline_text=headline,
                 facecam_pos=detected_region,
@@ -309,6 +320,20 @@ class FFmpegRenderWorker:
 
             await db.commit()
             await db.refresh(clip)
+
+            # Purge raw segment capture once all detected candidates for it have finished rendering
+            all_cands = (await db.execute(select(Candidate).where(Candidate.segment_id == segment.id))).scalars().all()
+            if all(c.status in (CandidateStatus.RENDERED.value, CandidateStatus.FAILED.value) for c in all_cands):
+                raw_p = Path(segment.file_path)
+                if raw_p.exists():
+                    try:
+                        raw_p.unlink()
+                        segment.disk_bytes = 0
+                        await db.commit()
+                        logger.info(f"All candidates for segment {segment.id} rendered. Purged raw capture {segment.file_path} to save scratch disk.")
+                    except Exception:
+                        pass
+
             return clip
 
     async def re_render_clip(self, clip_id: int, new_headline: str) -> Optional[Clip]:
@@ -329,10 +354,25 @@ class FFmpegRenderWorker:
             raw_seg_exists = segment and Path(segment.file_path).exists()
             old_clip_exists = clip.portrait_video_path and Path(clip.portrait_video_path).exists()
 
+            ts = int(datetime.now(timezone.utc).timestamp())
+            if not raw_seg_exists and not old_clip_exists and clip.r2_key:
+                # If local file was purged, download from R2 to re-burn headline
+                from packages.shared.storage import storage_manager
+                temp_down = self.output_dir / f"r2_dl_{clip_id}_{ts}.mp4"
+                try:
+                    storage_manager.s3.download_file(
+                        storage_manager.bucket,
+                        clip.r2_key,
+                        str(temp_down)
+                    )
+                    if temp_down.exists() and temp_down.stat().st_size > 50000:
+                        clip.portrait_video_path = str(temp_down)
+                        old_clip_exists = True
+                except Exception as e:
+                    logger.warning(f"Could not download clip {clip_id} from R2 for re-render: {e}")
+
             if not raw_seg_exists and not old_clip_exists:
                 return None
-
-            ts = int(datetime.now(timezone.utc).timestamp())
             cand_id_tag = candidate.id if candidate else clip_id
             new_clip_filename = f"clip_cand_{cand_id_tag}_{ts}.mp4"
             new_thumb_filename = f"thumb_cand_{cand_id_tag}_{ts}.jpg"

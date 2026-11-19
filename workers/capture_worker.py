@@ -95,12 +95,29 @@ class CaptureWorker:
             await self.scan_completed_segments(db)
             await db.commit()
 
+    def _is_file_readable(self, file_path: str) -> bool:
+        """Verify that an MP4 file is finalized, readable, and has a valid duration."""
+        try:
+            res = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=4
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                dur = float(res.stdout.strip().split()[0])
+                return dur >= 10.0
+            return False
+        except Exception:
+            return False
+
     def _spawn_segmented_capture(self, channel_url: str, session_id: int) -> Optional[subprocess.Popen]:
         """
         Pipes Streamlink into FFmpeg to segment live video into clean chunks.
+        Uses fragmented MP4 movflags so every chunk has instant metadata.
         """
         seg_pattern = str(self.scratch_dir / f"sess_{session_id}_seg_%03d.mp4")
-        cmd = f"streamlink --stdout {channel_url} 720p60,720p,best | ffmpeg -y -i pipe:0 -c copy -f segment -segment_time {self.segment_duration} -reset_timestamps 1 {seg_pattern}"
+        cmd = f"streamlink --stdout {channel_url} 720p60,720p,best | ffmpeg -y -i pipe:0 -c copy -f segment -segment_time {self.segment_duration} -reset_timestamps 1 -segment_format_options movflags=frag_keyframe+empty_moov {seg_pattern}"
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -114,8 +131,11 @@ class CaptureWorker:
 
     async def scan_completed_segments(self, db: AsyncSession) -> None:
         """
-        Scan scratch directory for completed segmented .mp4 files.
-        A segment is considered completed if a subsequent segment has started or if it hasn't grown.
+        Scan scratch directory for finalized segmented .mp4 files.
+        A segment is registered ONLY when:
+        1. The next segment exists and has started writing (ffmpeg closed current segment), OR
+        2. Stream session has stopped or capture process ended.
+        AND ffprobe confirms the file has valid audio/video duration.
         """
         if not self.scratch_dir.exists():
             return
@@ -131,14 +151,33 @@ class CaptureWorker:
                 parts = f.stem.split("_")
                 if len(parts) >= 4:
                     sess_id = int(parts[1])
+                    seg_num = int(parts[3])
+
                     # Verify session exists in DB before attempting to register
-                    sess_check = (await db.execute(select(StreamSession.id).where(StreamSession.id == sess_id))).scalar_one_or_none()
-                    if not sess_check:
+                    sess_stmt = select(StreamSession).where(StreamSession.id == sess_id)
+                    sess = (await db.execute(sess_stmt)).scalar_one_or_none()
+                    if not sess:
                         # Orphaned capture file from old/deleted session - delete file to prevent storage waste
                         try:
                             f.unlink()
                         except Exception:
                             pass
+                        continue
+
+                    # Completion Check:
+                    # 1. Next segment exists and has written data (> 50KB)
+                    next_seg_file = self.scratch_dir / f"sess_{sess_id}_seg_{seg_num + 1:03d}.mp4"
+                    has_next = next_seg_file.exists() and next_seg_file.stat().st_size > 50 * 1024
+
+                    # 2. Or the stream session is ended or streamer not currently recording
+                    is_ended = (sess.status != SessionStatus.ACTIVE.value) or (sess.streamer_id not in self.active_processes)
+
+                    if not has_next and not is_ended:
+                        # File is actively being recorded! Do not touch until ffmpeg moves to next segment.
+                        continue
+
+                    # Verify file is readable and has valid duration
+                    if not self._is_file_readable(file_str):
                         continue
 
                     existing = (await db.execute(select(Segment).where(Segment.file_path == file_str))).scalar_one_or_none()

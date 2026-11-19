@@ -94,6 +94,11 @@ export const App: React.FC = () => {
     await fetchData();
   };
 
+  const handleToggleStreamerRecording = async (id: number) => {
+    await api.toggleStreamerRecording(id);
+    await fetchData();
+  };
+
   const handleInstantCapture = async (id: number) => {
     await api.triggerInstantCapture(id, 60);
     await fetchData();
@@ -185,6 +190,7 @@ export const App: React.FC = () => {
               streamers={streamers}
               onAddStreamer={handleAddStreamer}
               onCheckLive={handleCheckLive}
+              onToggleRecording={handleToggleStreamerRecording}
               onInstantCapture={handleInstantCapture}
               onDeleteStreamer={handleDeleteStreamer}
               onUpdatePermission={handleUpdatePermission}

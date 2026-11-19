@@ -6,6 +6,7 @@ interface StreamersViewProps {
   streamers: Streamer[];
   onAddStreamer: (data: any) => Promise<void>;
   onCheckLive: (id: number) => Promise<void>;
+  onToggleRecording?: (id: number) => Promise<void>;
   onInstantCapture?: (id: number) => Promise<void>;
   onDeleteStreamer: (id: number) => Promise<void>;
   onUpdatePermission: (id: number, data: any) => Promise<void>;
@@ -15,6 +16,7 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
   streamers,
   onAddStreamer,
   onCheckLive,
+  onToggleRecording,
   onInstantCapture,
   onDeleteStreamer,
   onUpdatePermission,
@@ -22,6 +24,7 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStreamerForPerm, setSelectedStreamerForPerm] = useState<Streamer | null>(null);
   const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [capturingId, setCapturingId] = useState<number | null>(null);
 
   // Form states for adding streamer
@@ -69,6 +72,18 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
       await onCheckLive(id);
     } finally {
       setCheckingId(null);
+    }
+  };
+
+  const handleToggleRecord = async (id: number) => {
+    if (!onToggleRecording) return;
+    setTogglingId(id);
+    try {
+      await onToggleRecording(id);
+    } catch (err: any) {
+      alert(err.message || 'Failed to toggle recording');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -186,6 +201,26 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
                   }`}
                 >
                   {isGranted ? 'Granted' : 'Pending Consent'}
+                </button>
+              </div>
+
+              {/* Auto-Record Toggle */}
+              <div className="p-3 rounded-xl bg-vice-dark border border-vice-border/80 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${s.is_monitored ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  <span className="text-slate-300 font-medium">Auto-Record:</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleRecord(s.id)}
+                  disabled={togglingId === s.id}
+                  className={`font-bold px-2.5 py-1 rounded-lg text-[11px] border transition-all cursor-pointer ${
+                    s.is_monitored
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  {togglingId === s.id ? 'Updating...' : s.is_monitored ? 'RECORDING ON' : 'PAUSED (OFF)'}
                 </button>
               </div>
 

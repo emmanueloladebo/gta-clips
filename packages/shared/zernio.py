@@ -142,7 +142,15 @@ class ZernioAdapter:
                 headers=headers,
                 json=payload
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                err_detail = resp.text
+                try:
+                    err_json = resp.json()
+                    err_detail = err_json.get("message") or err_json.get("error") or err_json.get("detail") or resp.text
+                except Exception:
+                    pass
+                raise Exception(f"Zernio API error ({resp.status_code}): {err_detail}")
+
             res_json = resp.json()
             post_data = res_json.get("post", res_json)
             extracted_id = post_data.get("_id") or post_data.get("id") or str(uuid.uuid4())

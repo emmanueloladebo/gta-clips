@@ -156,6 +156,52 @@ async def delete_streamer(
     await db.commit()
 
 
+@router.post("/{streamer_id}/toggle-recording", response_model=StreamerResponse)
+async def toggle_streamer_recording(
+    streamer_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_current_user)
+):
+    """Toggle auto-recording ON/OFF for a streamer. If toggled off, any running capture process is terminated immediately."""
+    stmt = select(Streamer).options(selectinload(Streamer.permissions)).where(Streamer.id == streamer_id)
+    streamer = (await db.execute(stmt)).scalar_one_or_none()
+    if not streamer:
+        raise HTTPException(status_code=404, detail="Streamer not found")
+
+    streamer.is_monitored = not streamer.is_monitored
+
+    from workers.capture_worker import capture_worker
+    if not streamer.is_monitored:
+        # Pause recording: stop active capture process and close session to save disk space
+        await capture_worker.stop_capture_session(db, streamer)
+    else:
+        # Resume recording: check if streamer is live right now, and if so start capturing
+        live_info = await check_streamer_live(
+            platform=streamer.platform,
+            channel_id=streamer.channel_id,
+            channel_url=streamer.channel_url
+        )
+        streamer.live_status = StreamerStatus.LIVE.value if live_info["is_live"] else StreamerStatus.OFFLINE.value
+        streamer.stream_title = live_info.get("title")
+        streamer.game_name = live_info.get("game")
+        streamer.viewer_count = live_info.get("viewers", 0)
+        streamer.last_checked_at = datetime.now(timezone.utc)
+        if live_info["is_live"]:
+            await capture_worker.start_capture_session(db, streamer)
+
+    db.add(AuditEvent(
+        actor=user.username,
+        action="toggle_streamer_recording",
+        target_type="streamer",
+        target_id=str(streamer_id),
+        details_json={"display_name": streamer.display_name, "is_monitored": streamer.is_monitored}
+    ))
+
+    await db.commit()
+    await db.refresh(streamer)
+    return streamer
+
+
 @router.post("/{streamer_id}/check-live", response_model=StreamerResponse)
 async def trigger_live_check(
     streamer_id: int,
