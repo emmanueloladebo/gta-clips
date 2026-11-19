@@ -288,14 +288,5 @@ class DeepgramTranscriptionWorker:
                         Path(audio_file).unlink()
                     except Exception:
                         pass
-                await db.commit()
-                return None
-            finally:
-                if Path(audio_file).exists():
-                    try:
-                        Path(audio_file).unlink()
-                    except Exception:
-                        pass
-
 
 transcription_worker = DeepgramTranscriptionWorker()
