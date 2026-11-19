@@ -36,7 +36,12 @@ class Settings(BaseSettings):
     DEEPGRAM_MODEL: str = "nova-3"
     DEEPGRAM_BASE_URL: str = "https://api.deepgram.com/v1"
 
-    # AI Highlight Scorer (Groq LLM)
+    # Primary AI Highlight Scorer (9router AI Gateway)
+    ROUTER_API_KEY: str = ""
+    ROUTER_BASE_URL: str = "https://api.9router.oladapo.dev/v1"
+    ROUTER_MODEL_ID: str = "openai/gpt-6-luna"
+
+    # Fallback AI Highlight Scorer (Groq / GPT-OSS)
     GROQ_API_KEY: str = ""
     GROQ_MODEL_ID: str = "openai/gpt-oss-120b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"

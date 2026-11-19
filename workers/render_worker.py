@@ -221,9 +221,13 @@ class FFmpegRenderWorker:
             clip_path = str(self.output_dir / clip_filename)
             thumb_path = str(self.output_dir / thumb_filename)
 
-            # Lead-in adjustment: up to 5 seconds before climax if available
-            start_sec = max(0.0, candidate.start_second - 3.0)
-            duration_sec = candidate.duration_seconds + (candidate.start_second - start_sec)
+            # Enforce rich, full viral short duration (at least 30-50s) bounded by segment length
+            start_sec = max(0.0, candidate.start_second)
+            duration_sec = candidate.duration_seconds
+            if duration_sec < 30.0 and segment.duration_seconds >= 30.0:
+                duration_sec = 35.0
+            if start_sec + duration_sec > segment.duration_seconds:
+                duration_sec = max(10.0, segment.duration_seconds - start_sec)
 
             # Extract AI headline, caption, and hashtags from metadata if present
             meta = candidate.safety_flags if isinstance(candidate.safety_flags, dict) else {}
