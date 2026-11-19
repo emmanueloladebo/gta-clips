@@ -155,17 +155,16 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip, onR
                 >
                   {/* Thumbnail box */}
                   <div className="w-20 h-28 rounded-xl bg-vice-dark border border-slate-800 shrink-0 overflow-hidden relative flex items-center justify-center">
-                    {clip.r2_thumbnail_url ? (
-                      <img
-                        src={clip.r2_thumbnail_url}
-                        alt="thumbnail"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-slate-600">
-                        <Play className="w-6 h-6 fill-current" />
-                      </div>
-                    )}
+                    <img
+                      src={`/api/clips/${clip.id}/thumbnail`}
+                      alt="thumbnail"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        if (clip.r2_thumbnail_url && e.currentTarget.src !== clip.r2_thumbnail_url) {
+                          e.currentTarget.src = clip.r2_thumbnail_url;
+                        }
+                      }}
+                    />
                     <span className="absolute bottom-1 right-1 text-[10px] font-black bg-black/80 px-1 py-0.5 rounded text-white">
                       {clip.duration_seconds.toFixed(0)}s
                     </span>
@@ -211,22 +210,29 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip, onR
             <div className="lg:col-span-7 p-6 rounded-2xl bg-vice-card border border-vice-border space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
                 {/* 9:16 Phone Frame Mockup */}
-                <div className="w-full max-w-[240px] mx-auto aspect-[9/16] rounded-3xl bg-black border-4 border-slate-800 shadow-2xl overflow-hidden relative flex items-center justify-center">
-                  {activeClip.r2_url ? (
+                <div className="flex flex-col items-center">
+                  <div className="w-full max-w-[240px] mx-auto aspect-[9/16] rounded-3xl bg-black border-4 border-slate-800 shadow-2xl overflow-hidden relative flex items-center justify-center">
                     <video
-                      key={`${activeClip.r2_url}?v=${refreshNonce}`}
-                      src={`${activeClip.r2_url}?v=${refreshNonce}`}
+                      key={`video-${activeClip.id}-${refreshNonce}`}
                       controls
                       playsInline
+                      preload="metadata"
                       className="w-full h-full object-cover"
-                      poster={activeClip.r2_thumbnail_url ? `${activeClip.r2_thumbnail_url}?v=${refreshNonce}` : undefined}
-                    />
-                  ) : (
-                    <div className="text-center p-4 text-xs text-slate-400 space-y-2">
-                      <Play className="w-8 h-8 mx-auto text-vice-pink" />
-                      <p>Video rendering or cloud link loading...</p>
-                    </div>
-                  )}
+                      poster={`/api/clips/${activeClip.id}/thumbnail`}
+                    >
+                      <source src={`/api/clips/${activeClip.id}/stream`} type="video/mp4" />
+                      {activeClip.r2_url && <source src={activeClip.r2_url} type="video/mp4" />}
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                  <a
+                    href={`/api/clips/${activeClip.id}/stream`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 text-[11px] font-medium text-slate-400 hover:text-vice-pink underline flex items-center gap-1"
+                  >
+                    Open / Download MP4
+                  </a>
                 </div>
 
                 {/* Metadata & Actions Column */}

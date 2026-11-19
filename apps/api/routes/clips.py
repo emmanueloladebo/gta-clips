@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -186,6 +186,86 @@ async def re_render_clip_endpoint(
     await db.commit()
     await db.refresh(clip)
     return enrich_clip_urls(clip)
+
+
+@router.api_route("/{clip_id}/stream", methods=["GET", "HEAD"])
+async def stream_clip_video(
+    clip_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Stream clip video directly from local scratch disk (with HTTP 206 Partial Content range support)
+    or redirect to Cloudflare R2 if local copy was purged.
+    """
+    stmt = select(Clip).where(Clip.id == clip_id)
+    clip = (await db.execute(stmt)).scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    # 1. Check if local scratch video file exists at recorded path
+    if clip.portrait_video_path:
+        local_path = Path(clip.portrait_video_path)
+        if local_path.exists():
+            return FileResponse(
+                path=str(local_path),
+                media_type="video/mp4",
+                content_disposition_type="inline"
+            )
+
+    # 2. Check fallback in settings.SCRATCH_DIR / "clips"
+    scratch_clips_dir = Path(settings.SCRATCH_DIR) / "clips"
+    if clip.candidate_id:
+        matching_files = sorted(list(scratch_clips_dir.glob(f"clip_cand_{clip.candidate_id}_*.mp4")), reverse=True)
+        if matching_files and matching_files[0].exists():
+            return FileResponse(
+                path=str(matching_files[0]),
+                media_type="video/mp4",
+                content_disposition_type="inline"
+            )
+
+    # 3. If local file not found, redirect to fresh presigned R2 URL
+    if clip.r2_key:
+        try:
+            r2_url = storage_manager.generate_presigned_url(clip.r2_key, expires_in_seconds=3600)
+            return RedirectResponse(url=r2_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate video stream: {e}")
+
+    raise HTTPException(status_code=404, detail="Clip video file not found")
+
+
+@router.api_route("/{clip_id}/thumbnail", methods=["GET", "HEAD"])
+async def stream_clip_thumbnail(
+    clip_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Serve thumbnail image directly from local scratch disk or redirect to R2.
+    """
+    stmt = select(Clip).where(Clip.id == clip_id)
+    clip = (await db.execute(stmt)).scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    if clip.thumbnail_path:
+        local_path = Path(clip.thumbnail_path)
+        if local_path.exists():
+            return FileResponse(path=str(local_path), media_type="image/jpeg", content_disposition_type="inline")
+
+    scratch_clips_dir = Path(settings.SCRATCH_DIR) / "clips"
+    if clip.candidate_id:
+        matching_files = sorted(list(scratch_clips_dir.glob(f"thumb_cand_{clip.candidate_id}_*.jpg")), reverse=True)
+        if matching_files and matching_files[0].exists():
+            return FileResponse(path=str(matching_files[0]), media_type="image/jpeg", content_disposition_type="inline")
+
+    if clip.r2_thumbnail_key:
+        try:
+            r2_url = storage_manager.generate_presigned_url(clip.r2_thumbnail_key, expires_in_seconds=3600)
+            return RedirectResponse(url=r2_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+        except Exception:
+            pass
+
+    raise HTTPException(status_code=404, detail="Thumbnail not found")
 
 
 @router.get("/mock-media/{file_path:path}")
