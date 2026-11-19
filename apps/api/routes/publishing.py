@@ -203,9 +203,10 @@ async def publish_clip(
     try:
         # Submit to Zernio
         media_url = clip.r2_url or f"{settings.PUBLIC_BASE_URL}/api/clips/mock-media/{clip.r2_key}"
+        post_caption = clip.description if clip.description else f"{clip.title}\n\n{clip.tags or ''}"
         zernio_res = await zernio_adapter.submit_publish_job(
             media_url=media_url,
-            caption=f"{clip.title}\n\n{clip.tags or ''}",
+            caption=post_caption,
             platforms=[dest.platform],
             idempotency_key=idempotency_key,
             account_id=dest.external_account_id,
