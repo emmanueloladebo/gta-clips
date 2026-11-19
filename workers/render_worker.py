@@ -361,12 +361,13 @@ class FFmpegRenderWorker:
                 )
             elif old_clip_exists:
                 # Fast re-burn: Burn the new white card badge directly over the divider line on the existing 9:16 clip
+                temp_dir = self.output_dir / "tmp_text"
+                temp_dir.mkdir(parents=True, exist_ok=True)
                 formatted_card = format_headline_card_text(new_headline)
-                text_file = self.tmp_dir / f"re_card_{clip_id}_{ts}.txt"
+                text_file = temp_dir / f"re_card_{clip_id}_{ts}.txt"
                 text_file.write_text(formatted_card, encoding="utf-8")
                 escaped_text_path = str(text_file).replace("\\", "/").replace(":", "\\:")
-                font_opt = f":fontfile='{self.font_path}'" if self.font_path else ""
-                card_filter = f"drawtext=box=1:boxcolor=white@1.0:boxborderw=24:x=(w-text_w)/2:y=740-(text_h/2):fontsize=38:fontcolor=black:line_spacing=14{font_opt}:textfile='{escaped_text_path}'"
+                card_filter = f"drawtext=textfile='{escaped_text_path}':fontsize=38:fontcolor=black:line_spacing=12:x=(w-text_w)/2:y=715:box=1:boxcolor=white@1.0:boxborderw=24"
 
                 cmd = [
                     "ffmpeg", "-y",
