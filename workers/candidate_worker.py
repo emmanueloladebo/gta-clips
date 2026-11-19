@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.shared.config import settings
 from packages.shared.database import AsyncSessionLocal
-from packages.shared.models import Segment, Transcript, Candidate, Clip, UsageRecord
+from packages.shared.models import Segment, Transcript, Candidate, Clip, UsageRecord, Streamer, StreamSession
 from packages.shared.enums import SegmentStatus, CandidateStatus, MetricType
 from packages.shared.schemas import HighlightCandidateScoring, GroqScoringPayload
 
