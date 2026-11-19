@@ -84,6 +84,7 @@ class GroqCandidateWorker:
         self.router_api_key = settings.ROUTER_API_KEY
         self.router_base_url = settings.ROUTER_BASE_URL.rstrip("/")
         self.router_model_id = settings.ROUTER_MODEL_ID or "openai/gpt-6-luna"
+        self.model_id = self.router_model_id
 
         # Fallback: Groq / GPT-OSS
         self.groq_api_key = settings.GROQ_API_KEY
