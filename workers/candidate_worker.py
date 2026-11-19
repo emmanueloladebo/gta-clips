@@ -187,18 +187,21 @@ Respond with valid JSON only."""
 
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
-        body = {
+        body: Dict[str, Any] = {
             "model": model_id,
             "messages": [
                 {"role": "system", "content": "You are a professional viral video clipping AI. You always respond in valid JSON matching the schema."},
                 {"role": "user", "content": prompt}
             ],
             "response_format": {"type": "json_object"},
-            "temperature": 0.2,
             "max_tokens": 2048
         }
+        # Models like luna and o1 only support default temperature
+        if "luna" not in model_id.lower() and "o1" not in model_id.lower():
+            body["temperature"] = 0.2
 
         delay = 1.0
         for attempt in range(self.max_retries):
