@@ -309,45 +309,81 @@ class FFmpegRenderWorker:
             if not clip:
                 return None
 
-            candidate = (await db.execute(select(Candidate).where(Candidate.id == clip.candidate_id))).scalar_one_or_none()
-            if not candidate:
+            candidate = None
+            if clip.candidate_id:
+                candidate = (await db.execute(select(Candidate).where(Candidate.id == clip.candidate_id))).scalar_one_or_none()
+
+            segment = None
+            if candidate and candidate.segment_id:
+                segment = (await db.execute(select(Segment).where(Segment.id == candidate.segment_id))).scalar_one_or_none()
+
+            raw_seg_exists = segment and Path(segment.file_path).exists()
+            old_clip_exists = clip.portrait_video_path and Path(clip.portrait_video_path).exists()
+
+            if not raw_seg_exists and not old_clip_exists:
                 return None
-
-            segment = (await db.execute(select(Segment).where(Segment.id == candidate.segment_id))).scalar_one_or_none()
-            if not segment or not Path(segment.file_path).exists():
-                return None
-
-            strm = (await db.execute(select(Streamer).where(Streamer.id == clip.streamer_id))).scalar_one_or_none()
-            streamer_name = strm.display_name if strm else "Streamer"
-
-            meta = candidate.safety_flags if isinstance(candidate.safety_flags, dict) else {}
-            facecam_pos = meta.get("facecam_position") or "top_right"
-
-            crop_cam, detected_region = facecam_detector.detect_streamer_facecam(
-                video_path=segment.file_path,
-                preferred_position=facecam_pos
-            )
 
             ts = int(datetime.now(timezone.utc).timestamp())
-            new_clip_filename = f"clip_cand_{candidate.id}_{ts}.mp4"
-            new_thumb_filename = f"thumb_cand_{candidate.id}_{ts}.jpg"
+            cand_id_tag = candidate.id if candidate else clip_id
+            new_clip_filename = f"clip_cand_{cand_id_tag}_{ts}.mp4"
+            new_thumb_filename = f"thumb_cand_{cand_id_tag}_{ts}.jpg"
             new_clip_path = str(self.output_dir / new_clip_filename)
             new_thumb_path = str(self.output_dir / new_thumb_filename)
 
-            start_sec = max(0.0, candidate.start_second - 3.0)
-            duration_sec = candidate.duration_seconds + (candidate.start_second - start_sec)
+            rendered = False
+            duration_sec = clip.duration_seconds
 
-            rendered = self.render_vertical_clip(
-                input_file=segment.file_path,
-                start_sec=start_sec,
-                duration_sec=duration_sec,
-                output_file=new_clip_path,
-                streamer_name=streamer_name,
-                quote_text="",
-                headline_text=new_headline,
-                facecam_pos=detected_region,
-                crop_cam=crop_cam
-            )
+            if raw_seg_exists and candidate:
+                strm = (await db.execute(select(Streamer).where(Streamer.id == clip.streamer_id))).scalar_one_or_none()
+                streamer_name = strm.display_name if strm else "Streamer"
+
+                meta = candidate.safety_flags if isinstance(candidate.safety_flags, dict) else {}
+                facecam_pos = meta.get("facecam_position") or "top_right"
+
+                crop_cam, detected_region = facecam_detector.detect_streamer_facecam(
+                    video_path=segment.file_path,
+                    preferred_position=facecam_pos
+                )
+
+                start_sec = max(0.0, candidate.start_second - 3.0)
+                duration_sec = candidate.duration_seconds + (candidate.start_second - start_sec)
+
+                rendered = self.render_vertical_clip(
+                    input_file=segment.file_path,
+                    start_sec=start_sec,
+                    duration_sec=duration_sec,
+                    output_file=new_clip_path,
+                    streamer_name=streamer_name,
+                    quote_text="",
+                    headline_text=new_headline,
+                    facecam_pos=detected_region,
+                    crop_cam=crop_cam
+                )
+            elif old_clip_exists:
+                # Fast re-burn: Burn the new white card badge directly over the divider line on the existing 9:16 clip
+                formatted_card = self.format_headline_card_text(new_headline)
+                text_file = self.tmp_dir / f"re_card_{clip_id}_{ts}.txt"
+                text_file.write_text(formatted_card, encoding="utf-8")
+                escaped_text_path = str(text_file).replace("\\", "/").replace(":", "\\:")
+                font_opt = f":fontfile='{self.font_path}'" if self.font_path else ""
+                card_filter = f"drawtext=box=1:boxcolor=white@1.0:boxborderw=24:x=(w-text_w)/2:y=740-(text_h/2):fontsize=38:fontcolor=black:line_spacing=14{font_opt}:textfile='{escaped_text_path}'"
+
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", clip.portrait_video_path,
+                    "-vf", card_filter,
+                    "-c:v", "libx264",
+                    "-preset", "faster",
+                    "-crf", "22",
+                    "-c:a", "copy",
+                    new_clip_path
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+                rendered = (res.returncode == 0 and Path(new_clip_path).exists() and Path(new_clip_path).stat().st_size > 50000)
+                try:
+                    text_file.unlink()
+                except Exception:
+                    pass
 
             if not rendered or not Path(new_clip_path).exists() or Path(new_clip_path).stat().st_size < 50000:
                 return None
