@@ -14,7 +14,7 @@ from packages.shared.database import get_db
 from packages.shared.models import SystemConfig, User, AuditEvent
 from apps.api.auth import require_current_user
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 class AiModelSettings(BaseModel):
