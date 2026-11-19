@@ -121,13 +121,29 @@ async def update_streamer(
         raise HTTPException(status_code=404, detail="Streamer not found")
 
     if payload.display_name is not None:
-        streamer.display_name = payload.display_name
+        streamer.display_name = payload.display_name.strip()
+    if payload.channel_id is not None:
+        streamer.channel_id = payload.channel_id.strip()
     if payload.channel_url is not None:
-        streamer.channel_url = payload.channel_url
+        streamer.channel_url = payload.channel_url.strip()
+    if payload.platform is not None:
+        streamer.platform = payload.platform.strip()
     if payload.avatar_url is not None:
-        streamer.avatar_url = payload.avatar_url
+        streamer.avatar_url = payload.avatar_url.strip() if payload.avatar_url else None
     if payload.is_monitored is not None:
         streamer.is_monitored = payload.is_monitored
+
+    db.add(AuditEvent(
+        actor=user.username,
+        action="update_streamer",
+        target_type="streamer",
+        target_id=str(streamer_id),
+        details_json={
+            "display_name": streamer.display_name,
+            "channel_id": streamer.channel_id,
+            "platform": streamer.platform
+        }
+    ))
 
     await db.commit()
     await db.refresh(streamer)

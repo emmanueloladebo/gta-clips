@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, getAuthToken, removeAuthToken } from './api';
-import { Streamer, Clip, Candidate, DestinationAccount, PublishJob, StorageUsage, SystemMetrics, HealthStatus } from './types';
+import { Streamer, Clip, Candidate, DestinationAccount, PublishJob, StorageUsage, SystemMetrics, HealthStatus, AiModelSettings } from './types';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './components/OverviewView';
@@ -25,6 +25,7 @@ export const App: React.FC = () => {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [autoPostEnabled, setAutoPostEnabled] = useState<boolean>(false);
+  const [aiSettings, setAiSettings] = useState<AiModelSettings | null>(null);
 
   const fetchData = async () => {
     if (!isAuthenticated) return;
@@ -39,6 +40,7 @@ export const App: React.FC = () => {
         healthData,
         metricsData,
         autoPostData,
+        aiSettingsData,
       ] = await Promise.allSettled([
         api.getStreamers(),
         api.getClips(),
@@ -49,6 +51,7 @@ export const App: React.FC = () => {
         api.getHealth(),
         api.getMetrics(),
         api.getAutoPostStatus(),
+        api.getAiModelSettings(),
       ]);
 
       if (streamersData.status === 'fulfilled') setStreamers(streamersData.value);
@@ -60,6 +63,7 @@ export const App: React.FC = () => {
       if (healthData.status === 'fulfilled') setHealth(healthData.value);
       if (metricsData.status === 'fulfilled') setMetrics(metricsData.value);
       if (autoPostData.status === 'fulfilled') setAutoPostEnabled(autoPostData.value.auto_post_enabled);
+      if (aiSettingsData.status === 'fulfilled') setAiSettings(aiSettingsData.value);
     } catch (err) {
       console.error('Fetch error:', err);
     }
@@ -101,6 +105,11 @@ export const App: React.FC = () => {
 
   const handleInstantCapture = async (id: number) => {
     await api.triggerInstantCapture(id, 60);
+    await fetchData();
+  };
+
+  const handleUpdateStreamer = async (id: number, data: Partial<Streamer>) => {
+    await api.updateStreamer(id, data);
     await fetchData();
   };
 
@@ -156,6 +165,16 @@ export const App: React.FC = () => {
     return res;
   };
 
+  const handleToggleRouter = async () => {
+    const updated = await api.toggleRouterEngine();
+    setAiSettings(updated);
+  };
+
+  const handleUpdateAiSettings = async (data: Partial<AiModelSettings>) => {
+    const updated = await api.updateAiModelSettings(data);
+    setAiSettings(updated);
+  };
+
   const pendingClipsCount = clips.filter((c) => c.approval_status === 'pending_review').length;
   const liveStreamersCount = streamers.filter((s) => s.live_status === 'live').length;
 
@@ -194,6 +213,7 @@ export const App: React.FC = () => {
               onInstantCapture={handleInstantCapture}
               onDeleteStreamer={handleDeleteStreamer}
               onUpdatePermission={handleUpdatePermission}
+              onUpdateStreamer={handleUpdateStreamer}
             />
           )}
 
@@ -223,7 +243,14 @@ export const App: React.FC = () => {
             <StorageView storage={storage} onTriggerCleanup={handleTriggerCleanup} />
           )}
 
-          {currentTab === 'settings' && <SettingsView health={health} />}
+          {currentTab === 'settings' && (
+            <SettingsView
+              health={health}
+              aiSettings={aiSettings}
+              onToggleRouter={handleToggleRouter}
+              onUpdateAiSettings={handleUpdateAiSettings}
+            />
+          )}
         </main>
       </div>
     </div>

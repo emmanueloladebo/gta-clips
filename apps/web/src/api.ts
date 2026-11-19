@@ -1,6 +1,6 @@
 import {
   Streamer, Clip, Candidate, DestinationAccount,
-  PublishJob, StorageUsage, SystemMetrics, HealthStatus
+  PublishJob, StorageUsage, SystemMetrics, HealthStatus, AiModelSettings
 } from './types';
 
 const API_BASE = '/api';
@@ -65,6 +65,8 @@ export const api = {
     request<Streamer>(`/streamers/${id}/check-live`, { method: 'POST' }),
   toggleStreamerRecording: (id: number) =>
     request<Streamer>(`/streamers/${id}/toggle-recording`, { method: 'POST' }),
+  updateStreamer: (id: number, data: Partial<Streamer>) =>
+    request<Streamer>(`/streamers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   triggerInstantCapture: (id: number, duration: number = 60) =>
     request<any>(`/streamers/${id}/capture-now?duration=${duration}`, { method: 'POST' }),
   deleteStreamer: (id: number) =>
@@ -112,4 +114,11 @@ export const api = {
   triggerCleanup: () => request<any>('/storage/cleanup', { method: 'POST' }),
   getMetrics: () => request<SystemMetrics>('/metrics/summary'),
   getHealth: () => request<HealthStatus>('/health'),
+
+  // AI Engines & Model Settings
+  getAiModelSettings: () => request<AiModelSettings>('/settings/ai-models'),
+  updateAiModelSettings: (data: Partial<AiModelSettings>) =>
+    request<AiModelSettings>('/settings/ai-models', { method: 'PATCH', body: JSON.stringify(data) }),
+  toggleRouterEngine: () =>
+    request<AiModelSettings>('/settings/ai-models/toggle-router', { method: 'POST' }),
 };

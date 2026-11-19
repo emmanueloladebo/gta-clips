@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.shared.config import settings
 from packages.shared.database import AsyncSessionLocal
-from packages.shared.models import Segment, Transcript, Candidate, Clip, UsageRecord, Streamer, StreamSession
+from packages.shared.models import Segment, Transcript, Candidate, Clip, UsageRecord, Streamer, StreamSession, SystemConfig
 from packages.shared.enums import SegmentStatus, CandidateStatus, MetricType
 from packages.shared.schemas import HighlightCandidateScoring, GroqScoringPayload
 
@@ -32,14 +32,17 @@ def find_utterance_bounds(
     segment_duration: float
 ) -> Tuple[float, float]:
     """
-    Locates the spoken quote in Deepgram utterances to anchor ground-truth timestamps,
-    then expands to a viral 35-50s window with proper lead-in context and reaction.
+    Locates the spoken quote in Deepgram utterances to anchor ground-truth timestamps.
+    Respects the full natural story duration provided by the AI, ensuring the resolution
+    is never prematurely truncated before the payoff or punchline.
     """
+    s = max(0.0, fallback_start)
+    e = min(segment_duration, fallback_end)
+
     if not utterances or not evidence_quote:
-        dur = max(30.0, fallback_end - fallback_start)
-        s = max(0.0, fallback_start - (35.0 - (fallback_end - fallback_start)) * 0.4 if (fallback_end - fallback_start) < 35.0 else fallback_start)
-        e = min(segment_duration, s + max(35.0, dur))
-        return s, e
+        if (e - s) < 30.0 and segment_duration >= 30.0:
+            e = min(segment_duration, s + 35.0)
+        return round(s, 1), round(e, 1)
 
     quote_clean = evidence_quote.lower().strip()
     quote_words = [w for w in quote_clean.split() if len(w) > 3]
@@ -57,25 +60,21 @@ def find_utterance_bounds(
             best_match_end = float(u.get("end", fallback_end))
 
     if best_match_start is not None and max_overlap >= 1:
-        # Anchor around the climax: 15s lead-in context, 20s reaction/gameplay
-        s = max(0.0, best_match_start - 15.0)
-        e = min(segment_duration, max(best_match_end + 20.0, s + 35.0))
-        if (e - s) < 35.0 and segment_duration >= 35.0:
-            if s == 0.0:
-                e = min(segment_duration, 35.0)
-            elif e == segment_duration:
-                s = max(0.0, segment_duration - 35.0)
-        return s, e
+        # Include buildup: start slightly before the action/quote
+        s = max(0.0, min(fallback_start, best_match_start - 10.0))
+        # Complete story resolution: NEVER cut off before fallback_end or at least 15s after quote
+        e = min(segment_duration, max(fallback_end, best_match_end + 15.0))
+    else:
+        s = max(0.0, fallback_start)
+        e = min(segment_duration, fallback_end)
 
-    # Fallback expansion to minimum 35 seconds
-    dur = fallback_end - fallback_start
-    if dur < 35.0:
-        needed = 35.0 - dur
-        s = max(0.0, fallback_start - (needed * 0.4))
-        e = min(segment_duration, fallback_end + (needed * 0.6))
-        return s, e
+    # If duration is too short (< 30s), expand naturally
+    if (e - s) < 30.0 and segment_duration >= 30.0:
+        pad = 30.0 - (e - s)
+        s = max(0.0, s - pad * 0.4)
+        e = min(segment_duration, e + pad * 0.6)
 
-    return fallback_start, fallback_end
+    return round(s, 1), round(e, 1)
 
 
 class GroqCandidateWorker:
@@ -161,12 +160,16 @@ CAPTION RULES:
 HASHTAGS:
 - Must be: ["#gta6", "#gtavi", "#gaming", "#vicecity", "#gta6gameplay"]
 
-CRITICAL TIMING & DURATION RULES:
-- Every viral TikTok/Shorts clip MUST be between 30 and 55 seconds long (never shorter than 25 seconds).
-- For "start_second" and "end_second", provide the exact SECOND float numbers matching the transcript (e.g. start_second: 185.0, end_second: 225.0).
-- If the dialogue/punchline is short (e.g. 5-10 seconds), you MUST include the buildup context leading into it (15 seconds before) and the aftermath reaction (15-20 seconds after) so the clip tells the complete story!
-- "duration_seconds" must equal end_second - start_second (between 30.0 and 55.0).
-- Assign an entertainment score between 70.0 and 99.0.
+CRITICAL TIMING & STORY RESOLUTION RULES (MANDATORY):
+- DO NOT artificially force a short cutoff! A clip MUST cover the entire scenario until it naturally concludes.
+- The clip should be as long as necessary to complete the story arc—typically 35 to 80 seconds (up to 95 seconds if needed for full resolution).
+- COMPLETE RESOLUTION REQUIREMENT:
+  * NEVER end a clip in the middle of an action, chase, race, argument, or sentence!
+  * Ensure the clip extends until the scenario reaches its payoff, punchline, or outcome (e.g. they reach the station, beat the train, crash, get caught, finish laughing, or the mission resolves).
+  * Always capture the full setup/buildup + the climax + the complete aftermath/outcome.
+- "start_second" and "end_second": provide the exact timestamp matching the transcript timestamps where the situation starts and where the situation fully resolves.
+- "duration_seconds" must equal end_second - start_second.
+- Assign an entertainment score between 75.0 and 99.0.
 
 JSON SCHEMA:
 {{
@@ -284,35 +287,78 @@ Respond with valid JSON only."""
             streamer_name=streamer_name
         )
 
-        # 1. Primary: 9router (openai/gpt-6-luna)
-        if self.router_api_key:
+        # Query dynamic AI engine settings from system configuration
+        router_enabled = True
+        primary_provider = "9router"
+        router_model = self.router_model_id
+        groq_model = self.groq_model_id
+
+        try:
+            async with AsyncSessionLocal() as db:
+                configs = (await db.execute(select(SystemConfig))).scalars().all()
+                for c in configs:
+                    if c.key == "router_enabled":
+                        router_enabled = (c.value.lower() == "true")
+                    elif c.key == "primary_provider":
+                        primary_provider = c.value.lower()
+                    elif c.key == "router_model_id" and c.value.strip():
+                        router_model = c.value.strip()
+                    elif c.key == "groq_model_id" and c.value.strip():
+                        groq_model = c.value.strip()
+        except Exception as e:
+            logger.warning(f"Could not read dynamic system config: {e}")
+
+        async def call_router():
+            if not self.router_api_key or not router_enabled:
+                return []
             try:
-                highlights = await self._call_llm(
+                return await self._call_llm(
                     base_url=self.router_base_url,
                     api_key=self.router_api_key,
-                    model_id=self.router_model_id,
+                    model_id=router_model,
                     prompt=prompt,
                     provider_name="9router"
                 )
-                if highlights:
-                    return highlights
             except Exception as e:
-                logger.warning(f"9router ({self.router_model_id}) failed: {e}. Falling back to Groq / GPT-OSS...")
+                logger.warning(f"9router ({router_model}) failed: {e}")
+                return []
 
-        # 2. Fallback: Groq (openai/gpt-oss-120b)
-        if self.groq_api_key:
+        async def call_groq():
+            if not self.groq_api_key:
+                return []
             try:
-                highlights = await self._call_llm(
+                return await self._call_llm(
                     base_url=self.groq_base_url,
                     api_key=self.groq_api_key,
-                    model_id=self.groq_model_id,
+                    model_id=groq_model,
                     prompt=prompt,
                     provider_name="Groq/GPT-OSS"
                 )
+            except Exception as e:
+                logger.error(f"Groq ({groq_model}) failed: {e}")
+                return []
+
+        if primary_provider == "groq" or not router_enabled:
+            # Groq primary
+            logger.info(f"Evaluating with Groq ({groq_model}) [9router enabled: {router_enabled}]")
+            highlights = await call_groq()
+            if highlights:
+                return highlights
+            if router_enabled:
+                logger.info(f"Falling back to 9router ({router_model})")
+                highlights = await call_router()
                 if highlights:
                     return highlights
-            except Exception as e:
-                logger.error(f"Fallback Groq ({self.groq_model_id}) failed: {e}")
+        else:
+            # 9router primary
+            logger.info(f"Evaluating with 9router ({router_model})")
+            highlights = await call_router()
+            if highlights:
+                return highlights
+            logger.info(f"Falling back to Groq ({groq_model})")
+            highlights = await call_groq()
+            if highlights:
+                return highlights
 
         # If mock mode or keys missing
         if not self.router_api_key and not self.groq_api_key:

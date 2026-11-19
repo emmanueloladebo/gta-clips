@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Radio, RefreshCw, Trash2, CheckCircle2, AlertCircle, Shield, ExternalLink, Flame } from 'lucide-react';
+import { Plus, Radio, RefreshCw, Trash2, CheckCircle2, AlertCircle, Shield, ExternalLink, Flame, Edit3 } from 'lucide-react';
 import { Streamer } from '../types';
 
 interface StreamersViewProps {
@@ -10,6 +10,7 @@ interface StreamersViewProps {
   onInstantCapture?: (id: number) => Promise<void>;
   onDeleteStreamer: (id: number) => Promise<void>;
   onUpdatePermission: (id: number, data: any) => Promise<void>;
+  onUpdateStreamer?: (id: number, data: Partial<Streamer>) => Promise<void>;
 }
 
 export const StreamersView: React.FC<StreamersViewProps> = ({
@@ -20,9 +21,11 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
   onInstantCapture,
   onDeleteStreamer,
   onUpdatePermission,
+  onUpdateStreamer,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStreamerForPerm, setSelectedStreamerForPerm] = useState<Streamer | null>(null);
+  const [editingStreamer, setEditingStreamer] = useState<Streamer | null>(null);
   const [checkingId, setCheckingId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [capturingId, setCapturingId] = useState<number | null>(null);
@@ -35,6 +38,42 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'pending'>('pending');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form states for editing streamer
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editChannelId, setEditChannelId] = useState('');
+  const [editPlatform, setEditPlatform] = useState<'twitch' | 'youtube'>('twitch');
+  const [editChannelUrl, setEditChannelUrl] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const openEditModal = (s: Streamer) => {
+    setEditingStreamer(s);
+    setEditDisplayName(s.display_name);
+    setEditChannelId(s.channel_id);
+    setEditPlatform((s.platform as 'twitch' | 'youtube') || 'twitch');
+    setEditChannelUrl(s.channel_url || '');
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStreamer || !onUpdateStreamer) return;
+    if (!editDisplayName.trim() || !editChannelId.trim()) return;
+    setIsUpdating(true);
+    try {
+      const computedUrl = editChannelUrl.trim() || (editPlatform === 'twitch' ? `https://twitch.tv/${editChannelId.trim()}` : `https://youtube.com/@${editChannelId.trim()}`);
+      await onUpdateStreamer(editingStreamer.id, {
+        display_name: editDisplayName.trim(),
+        channel_id: editChannelId.trim(),
+        platform: editPlatform,
+        channel_url: computedUrl,
+      });
+      setEditingStreamer(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update streamer details');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,17 +288,26 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
                   )}
                 </div>
 
-                <button
-                  onClick={() => {
-                    if (confirm(`Remove ${s.display_name} from monitored streamers?`)) {
-                      onDeleteStreamer(s.id);
-                    }
-                  }}
-                  className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                  title="Remove streamer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEditModal(s)}
+                    className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+                    title="Edit streamer display name and channel details"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Remove ${s.display_name} from monitored streamers?`)) {
+                        onDeleteStreamer(s.id);
+                      }
+                    }}
+                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                    title="Remove streamer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -413,6 +461,84 @@ export const StreamersView: React.FC<StreamersViewProps> = ({
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Streamer Modal */}
+      {editingStreamer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-vice-card border border-vice-border rounded-2xl w-full max-w-md p-6 space-y-4">
+            <h2 className="text-base font-bold text-white">Edit Streamer Details</h2>
+            <p className="text-xs text-slate-400">
+              Fix any typos in the streamer name so newly generated clips and headlines use the correct name.
+            </p>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Display Name (Used in Clip Headlines)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. TGG or IShowSpeed"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white placeholder-slate-600 focus:outline-none focus:border-vice-pink"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Platform</label>
+                <select
+                  value={editPlatform}
+                  onChange={(e: any) => setEditPlatform(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white focus:outline-none focus:border-vice-pink"
+                >
+                  <option value="twitch">Twitch</option>
+                  <option value="youtube">YouTube</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Channel Username / ID</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. tgg_gta or ishowspeed"
+                  value={editChannelId}
+                  onChange={(e) => setEditChannelId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white placeholder-slate-600 focus:outline-none focus:border-vice-pink"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Channel URL</label>
+                <input
+                  type="url"
+                  placeholder="e.g. https://twitch.tv/tgg_gta"
+                  value={editChannelUrl}
+                  onChange={(e) => setEditChannelUrl(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white placeholder-slate-600 focus:outline-none focus:border-vice-pink"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-vice-border">
+                <button
+                  type="button"
+                  onClick={() => setEditingStreamer(null)}
+                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-vice-pink to-vice-orange text-white font-bold disabled:opacity-50"
+                >
+                  {isUpdating ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

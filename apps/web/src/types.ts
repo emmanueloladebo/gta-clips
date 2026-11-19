@@ -133,3 +133,12 @@ export interface HealthStatus {
   auto_post_enabled: boolean;
   blockers: string[];
 }
+
+export interface AiModelSettings {
+  router_enabled: boolean;
+  primary_provider: '9router' | 'groq';
+  router_model_id: string;
+  groq_model_id: string;
+  router_available: boolean;
+  groq_available: boolean;
+}

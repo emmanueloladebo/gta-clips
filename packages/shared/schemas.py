@@ -88,7 +88,9 @@ class StreamerCreate(BaseModel):
 
 class StreamerUpdate(BaseModel):
     display_name: Optional[str] = None
+    channel_id: Optional[str] = None
     channel_url: Optional[str] = None
+    platform: Optional[str] = None
     avatar_url: Optional[str] = None
     is_monitored: Optional[bool] = None
 

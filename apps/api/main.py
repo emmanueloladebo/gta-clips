@@ -13,7 +13,7 @@ from apps.api.auth import seed_initial_admin
 from apps.api.routes import (
     auth, streamers, permissions, sessions,
     candidates, clips, publishing, storage,
-    metrics, audit, health
+    metrics, audit, health, settings_router
 )
 
 
@@ -55,6 +55,7 @@ app.include_router(storage.router)
 app.include_router(metrics.router)
 app.include_router(audit.router)
 app.include_router(health.router)
+app.include_router(settings_router.router)
 
 # Serve web dashboard build if it exists
 web_dist = Path(__file__).parent.parent / "web" / "dist"

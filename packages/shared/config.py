@@ -71,10 +71,10 @@ class Settings(BaseSettings):
 
     # Retention & Capture Rules
     MEDIA_TTL_HOURS: int = 24  # Hard 24h retention policy
-    SEGMENT_SECONDS: int = 300  # 5 minutes per segment (faster clip turnaround & lower disk footprint)
+    SEGMENT_SECONDS: int = 600  # 10 minutes per segment (ensures full story arcs, races, chases, and punchlines resolve)
     MAX_CONCURRENT_STREAMS: int = 3
     AUTO_POST_ENABLED: bool = False  # Review-before-post default
-    VIRAL_SCORE_THRESHOLD: float = 65.0  # Captures viral moments, missions, unhinged NPCs, and gameplay chaos (0-100)
+    VIRAL_SCORE_THRESHOLD: float = 75.0  # Quality threshold: only genuinely funny, intense, or shocking moments are saved (0-100)
 
     # Social Publishing (Zernio)
     ZERNIO_API_KEY: str = ""
