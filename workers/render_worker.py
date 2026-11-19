@@ -5,6 +5,7 @@ watermark attribution, thumbnail export, and 24h retention tag.
 """
 import asyncio
 import os
+import re
 import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
