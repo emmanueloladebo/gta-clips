@@ -29,8 +29,18 @@ class GroqCandidateWorker:
         self.mock_mode = not bool(self.api_key)
         self.max_retries = 3
 
-    def build_prompt(self, transcript_text: str, duration_seconds: float) -> str:
+    def build_prompt(self, transcript_text: str, duration_seconds: float, recent_headlines: Optional[List[str]] = None) -> str:
         """Construct prompt requesting high-converting viral hooks matching Vice City Snips quality."""
+        banned_section = ""
+        if recent_headlines:
+            formatted_recent = "\n".join(f"- {h}" for h in recent_headlines[:15])
+            banned_section = f"""
+STRICT HEADLINE DIVERSITY (DO NOT REPEAT):
+Do NOT use or closely imitate any of these existing headlines:
+{formatted_recent}
+Every new headline must be 100% fresh, creative, and strictly specific to what happened in THIS clip.
+"""
+
         return f"""You are a top viral TikTok/Shorts content curator specialized in Grand Theft Auto VI (GTA 6).
 Analyze this transcript from a {duration_seconds:.0f}-second livestream segment.
 
@@ -45,6 +55,7 @@ Deeply analyze dialogue, streamer reactions, scenario, and gameplay context:
 HEADLINE ON-SCREEN RULES:
 - Must be a punchy, curiosity-inducing hook (4 to 9 words in UPPERCASE) with 1-2 relevant emojis at the end.
 - It must accurately describe the exact scenario/dialogue in the video!
+- NEVER give generic titles like "HEAD CLIPPERS FAIL" or "JASON & LUCIA CHAOS". Make every title unique and descriptive.
 - Perfect headline examples:
   * "STEALING A JET IN GTA 6 IS A DEATH SENTENCE 💀✈️"
   * "GTA 6 HAS A TALKING PARROT THAT ROASTS YOU 😭🦜"
@@ -55,7 +66,7 @@ HEADLINE ON-SCREEN RULES:
   * "BRO REALLY USED A TENNIS BALL AS A WEAPON 😭"
   * "YOU CAN ACTUALLY BUILD MUSCLE IN GTA 6?!"
   * "I JUST WITNESSED A RANDOM MURDER IN GTA 6 💀"
-
+{banned_section}
 CAPTION RULES:
 - Write a short, natural social caption (1 sentence, everyday words - no big english):
   * "Bro thought this was GTA 5 😭💀 The military wasn't playing!"
@@ -96,7 +107,7 @@ Transcript:
 
 Respond with valid JSON only."""
 
-    async def score_transcript(self, transcript_text: str, duration_seconds: float) -> List[HighlightCandidateScoring]:
+    async def score_transcript(self, transcript_text: str, duration_seconds: float, recent_headlines: Optional[List[str]] = None) -> List[HighlightCandidateScoring]:
         """Call Groq API to extract viral highlight moments."""
         if not transcript_text or not transcript_text.strip():
             logger.info("Empty transcript text provided. No highlights to extract.")
@@ -106,7 +117,7 @@ Respond with valid JSON only."""
             logger.warning("Groq API key not configured. Skipping candidate scoring.")
             return []
 
-        prompt = self.build_prompt(transcript_text, duration_seconds)
+        prompt = self.build_prompt(transcript_text, duration_seconds, recent_headlines=recent_headlines)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -242,7 +253,12 @@ Respond with valid JSON only."""
                 if dialogue_lines:
                     scoring_text = "\n".join(dialogue_lines)
 
-            raw_highlights = await self.score_transcript(scoring_text, segment.duration_seconds)
+            # Fetch recent headlines to actively prevent duplicate or repetitive titles across clips
+            recent_cands = (await db.execute(select(Candidate.hook_summary).order_by(Candidate.id.desc()).limit(15))).scalars().all()
+            recent_clips = (await db.execute(select(Clip.title).order_by(Clip.id.desc()).limit(15))).scalars().all()
+            all_recent = list(set([h for h in (recent_cands + recent_clips) if h]))
+
+            raw_highlights = await self.score_transcript(scoring_text, segment.duration_seconds, recent_headlines=all_recent)
             deduped = self.deduplicate_candidates(raw_highlights)
 
             # Strict Virality Gate: only moments meeting or exceeding the viral threshold are saved

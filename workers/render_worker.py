@@ -190,6 +190,11 @@ class FFmpegRenderWorker:
     async def render_candidate_to_clip(self, candidate_id: int) -> Optional[Clip]:
         """Convert an approved candidate into a vertical 9:16 clip."""
         async with AsyncSessionLocal() as db:
+            # Check if this candidate already has an existing clip to avoid duplicate titles/clips
+            existing_clip = (await db.execute(select(Clip).where(Clip.candidate_id == candidate_id))).scalar_one_or_none()
+            if existing_clip:
+                return existing_clip
+
             cand_stmt = select(Candidate).where(Candidate.id == candidate_id)
             candidate = (await db.execute(cand_stmt)).scalar_one_or_none()
             if not candidate:
