@@ -47,6 +47,7 @@ export interface Clip {
   approval_status: 'pending_review' | 'approved' | 'rejected' | 'published';
   auto_post_eligible: boolean;
   created_at: string;
+  updated_at?: string;
   expires_at: string;
 }
 

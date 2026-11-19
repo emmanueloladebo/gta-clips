@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     SEGMENT_SECONDS: int = 600  # 10 minutes per segment
     MAX_CONCURRENT_STREAMS: int = 3
     AUTO_POST_ENABLED: bool = False  # Review-before-post default
-    VIRAL_SCORE_THRESHOLD: float = 75.0  # Balanced virality gate for entertaining/funny moments (0-100)
+    VIRAL_SCORE_THRESHOLD: float = 65.0  # Captures viral moments, missions, unhinged NPCs, and gameplay chaos (0-100)
 
     # Social Publishing (Zernio)
     ZERNIO_API_KEY: str = ""

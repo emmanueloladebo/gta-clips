@@ -121,11 +121,15 @@ class ZernioAdapter:
                 target["accountId"] = account_id
             platform_targets.append(target)
 
+        media_items = []
+        if media_url:
+            media_items.append({"url": media_url, "type": "video"})
+
         payload = {
             "title": title or "GTA 6 Highlight",
             "content": caption,
             "platforms": platform_targets,
-            "mediaItems": [media_url] if media_url else [],
+            "mediaItems": media_items,
         }
         if scheduled_at:
             payload["scheduledFor"] = scheduled_at.isoformat()

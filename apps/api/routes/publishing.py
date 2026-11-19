@@ -44,9 +44,19 @@ async def sync_zernio_destinations(
 ):
     """
     Fetch all connected social accounts from Zernio and sync them into destination accounts.
+    Removes any old stale or mock accounts not present in Zernio.
     """
     remote_accounts = await zernio_adapter.get_connected_accounts()
     synced: List[DestinationAccount] = []
+
+    if remote_accounts:
+        remote_ext_ids = {str(item["external_account_id"]) for item in remote_accounts}
+        # Remove old accounts that don't belong to the user's real Zernio connections
+        existing_res = await db.execute(select(DestinationAccount))
+        for old_acc in existing_res.scalars().all():
+            if str(old_acc.external_account_id) not in remote_ext_ids:
+                await db.delete(old_acc)
+        await db.flush()
 
     for item in remote_accounts:
         stmt = select(DestinationAccount).where(

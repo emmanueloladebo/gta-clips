@@ -223,6 +223,12 @@ class ClipApprovalRequest(BaseModel):
     custom_tags: Optional[str] = None
 
 
+class ClipReRenderRequest(BaseModel):
+    headline: str
+    caption: Optional[str] = None
+    tags: Optional[str] = None
+
+
 class ClipUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None

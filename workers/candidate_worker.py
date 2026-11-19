@@ -30,49 +30,62 @@ class GroqCandidateWorker:
         self.max_retries = 3
 
     def build_prompt(self, transcript_text: str, duration_seconds: float) -> str:
-        """Construct bounded prompt requesting schema-validated viral clip detection with deep GTA 6 context."""
-        return f"""You are an elite, creative viral video editor and curator specialized in Grand Theft Auto VI (GTA 6).
-Analyze the following transcript from a {duration_seconds:.0f}-second livestream segment.
+        """Construct prompt requesting high-converting viral hooks matching Vice City Snips quality."""
+        return f"""You are a top viral TikTok/Shorts content curator specialized in Grand Theft Auto VI (GTA 6).
+Analyze this transcript from a {duration_seconds:.0f}-second livestream segment.
 
-YOUR MISSION:
-Find the most entertaining, hilarious, intense, scandalous, or memorable moment in this transcript that will perform well on TikTok, YouTube Shorts, and Instagram Reels.
+YOUR OBJECTIVE:
+Find the single most captivating, intense, shocking, or hilarious moment in this segment.
+Deeply analyze dialogue, streamer reactions, scenario, and gameplay context:
+- Missions & base break-ins (stealing a fighter jet from the military base, plane crashes in swamps, boat escapes).
+- Unhinged NPCs & dialogue (talking parrots that roast people, almost getting banned by weird NPCs, pedestrians, random crimes).
+- Game mechanics & discoveries (new gym systems, building muscle, comparing police AI to GTA 5, weird weapons like tennis balls).
+- Streamer panic, chaos, roasts, laughing, scream reactions, unexpected fails.
 
-DEEP GTA 6 KNOWLEDGE & VIBES:
-Do NOT limit your search to just 5-star police chases. GTA 6 in the state of Leonida (Vice City) is full of crazy, diverse moments:
-- Lucia and Jason dynamics: romantic tension, banter, relationship drama, ex-partners, arguments, trust and crime partnership.
-- Vice City nightlife: Lucia dancing at clubs, partying, wild NPCs, twerking on car roofs, beach antics, luxury lifestyle.
-- Stunts and chaos: stealing fighter jets from the military base, crazy car ramps, speedboat chases in the Keys, airboats in the swamp with alligators, robbing stores, weapon experiments.
-- Funny Florida/Leonida humor: bizarre NPC interactions, hilarious dialogue, weird radio broadcasts, ridiculous social media moments.
-- Streamer reactions: funny jokes, roasts, laughing, screaming, unexpected fails, clutch saves, genuine shock or hype.
-- Random fun banter: any conversation or moment that is funny, weird, or interesting to watch!
+HEADLINE ON-SCREEN RULES:
+- Must be a punchy, curiosity-inducing hook (4 to 9 words in UPPERCASE) with 1-2 relevant emojis at the end.
+- It must accurately describe the exact scenario/dialogue in the video!
+- Perfect headline examples:
+  * "STEALING A JET IN GTA 6 IS A DEATH SENTENCE 💀✈️"
+  * "GTA 6 HAS A TALKING PARROT THAT ROASTS YOU 😭🦜"
+  * "THIS GTA 6 NPC ALMOST GOT HIM BANNED 💀"
+  * "I FOUND A CRASHED PLANE IN GTA 6… BIG MISTAKE 💀"
+  * "TRYING TO SNEAK ONTO A CRUISE SHIP IN GTA 6 💀"
+  * "GTA 6 COPS ARE WAY SMARTER THAN GTA 5 COPS"
+  * "BRO REALLY USED A TENNIS BALL AS A WEAPON 😭"
+  * "YOU CAN ACTUALLY BUILD MUSCLE IN GTA 6?!"
+  * "I JUST WITNESSED A RANDOM MURDER IN GTA 6 💀"
 
-RULES:
-1. If there is a fun, interesting, funny, or action-packed moment in the transcript, extract the best 15 to 60-second clip window.
-2. Only return an empty list {{"highlights": []}} if the transcript is completely empty, unintelligible noise, or pure silence.
-3. Provide a score between 70 and 100 based on entertainment value, humor, or excitement.
-4. Provide a punchy, click-worthy 'headline' in uppercase (3-6 words, e.g. "LUCIA DANCING AT THE CLUB 💃", "STEALING A MILITARY JET ✈️", "JASON'S WORST DECISION EVER 😂", "BRO ACCIDENTALLY JUMPED THE BRIDGE 💀").
-5. Write a natural, conversational 'caption' for social media (simple, everyday words - no big english or robotic prose).
-6. Provide up to 5 lowercase hashtags, always including "#gta" and "#gta6" (e.g. ["#gta", "#gta6", "#gaming", "#gtavice", "#viral"]).
-7. Quote the exact spoken words from the transcript as evidence.
-8. Output MUST strictly adhere to the JSON schema below.
+CAPTION RULES:
+- Write a short, natural social caption (1 sentence, everyday words - no big english):
+  * "Bro thought this was GTA 5 😭💀 The military wasn't playing!"
+  * "This parrot has absolutely NO FILTER 😭🦜💀"
+  * "I thought stealing a police boat would SAVE me 💀"
 
-JSON Schema:
+HASHTAGS:
+- Must be: ["#gta6", "#gtavi", "#gaming", "#vicecity", "#gta6gameplay"]
+
+WINDOW & DURATION:
+- Extract the best 20 to 50-second window.
+- Assign an entertainment score between 70.0 and 99.0.
+
+JSON SCHEMA:
 {{
   "highlights": [
     {{
-      "hook_summary": "Catchy clip title (5-10 words)",
-      "headline": "LUCIA CAUGHT DANCING AT THE CLUB 💃",
-      "caption": "Jason was not ready for this in Vice City!",
-      "hashtags": ["#gta", "#gta6", "#gaming", "#gtavice", "#viral"],
+      "hook_summary": "Catchy 4-7 word title",
+      "headline": "STEALING A JET IN GTA 6 IS A DEATH SENTENCE 💀✈️",
+      "caption": "Bro thought this was GTA 5 😭💀 The military wasn't playing!",
+      "hashtags": ["#gta6", "#gtavi", "#gaming", "#vicecity", "#gta6gameplay"],
       "facecam_position": "top_right",
-      "start_second": 5.0,
-      "end_second": 35.0,
-      "duration_seconds": 30.0,
-      "score": 88.0,
-      "excitement_score": 90.0,
-      "clarity_score": 85.0,
-      "why_highlight": "Funny and entertaining dialogue/moment",
-      "evidence_quote": "Exact transcript text",
+      "start_second": 10.0,
+      "end_second": 45.0,
+      "duration_seconds": 35.0,
+      "score": 92.0,
+      "excitement_score": 94.0,
+      "clarity_score": 90.0,
+      "why_highlight": "Streamer infiltrates the military base and gets surrounded by tanks.",
+      "evidence_quote": "Exact spoken words from transcript",
       "safety_flags": []
     }}
   ]
@@ -81,7 +94,7 @@ JSON Schema:
 Transcript:
 \"\"\"{transcript_text}\"\"\"
 
-Respond with valid JSON only. Do not add markdown backticks outside JSON."""
+Respond with valid JSON only."""
 
     async def score_transcript(self, transcript_text: str, duration_seconds: float) -> List[HighlightCandidateScoring]:
         """Call Groq API to extract viral highlight moments."""

@@ -131,6 +131,16 @@ class CaptureWorker:
                 parts = f.stem.split("_")
                 if len(parts) >= 4:
                     sess_id = int(parts[1])
+                    # Verify session exists in DB before attempting to register
+                    sess_check = (await db.execute(select(StreamSession.id).where(StreamSession.id == sess_id))).scalar_one_or_none()
+                    if not sess_check:
+                        # Orphaned capture file from old/deleted session - delete file to prevent storage waste
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
+                        continue
+
                     existing = (await db.execute(select(Segment).where(Segment.file_path == file_str))).scalar_one_or_none()
                     if not existing:
                         await self.register_recorded_segment(db, sess_id, file_str, float(self.segment_duration))

@@ -13,7 +13,7 @@ from packages.shared.config import settings
 from packages.shared.database import get_db
 from packages.shared.models import Clip, Streamer, CreatorPermission, AuditEvent, User
 from packages.shared.enums import ApprovalStatus, PermissionStatus
-from packages.shared.schemas import ClipResponse, ClipUpdate, ClipApprovalRequest
+from packages.shared.schemas import ClipResponse, ClipUpdate, ClipApprovalRequest, ClipReRenderRequest
 from packages.shared.storage import storage_manager
 from apps.api.auth import require_current_user
 
@@ -145,6 +145,43 @@ async def review_clip(
             target_id=str(clip.id),
             details_json={"title": clip.title, "streamer_id": clip.streamer_id}
         ))
+
+    await db.commit()
+    await db.refresh(clip)
+    return enrich_clip_urls(clip)
+
+
+@router.post("/{clip_id}/re-render", response_model=ClipResponse)
+async def re_render_clip_endpoint(
+    clip_id: int,
+    payload: ClipReRenderRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_current_user)
+):
+    """
+    Re-render a clip with an edited headline burned onto the middle white card.
+    Updates local scratch video, uploads fresh MP4 to Cloudflare R2, and refreshes preview URL.
+    """
+    from workers.render_worker import render_worker
+    clip = await render_worker.re_render_clip(clip_id, payload.headline)
+    if not clip:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to re-render clip. Source segment may have expired or is missing."
+        )
+
+    if payload.caption is not None:
+        clip.description = payload.caption
+    if payload.tags is not None:
+        clip.tags = payload.tags
+
+    db.add(AuditEvent(
+        actor=user.username,
+        action="re_render_clip_headline",
+        target_type="clip",
+        target_id=str(clip.id),
+        details_json={"headline": payload.headline}
+    ))
 
     await db.commit()
     await db.refresh(clip)

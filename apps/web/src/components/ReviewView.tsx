@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
-import { Film, Check, X, Clock, Play, Tag, Flame, ShieldAlert, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Film, Check, X, Clock, Play, Tag, Flame, ShieldAlert, AlertCircle, RefreshCw } from 'lucide-react';
 import { Clip } from '../types';
 
 interface ReviewViewProps {
   clips: Clip[];
   onReviewClip: (id: number, action: 'approve' | 'reject', meta?: any) => Promise<void>;
+  onReRenderClip?: (id: number, headline: string, caption?: string, tags?: string) => Promise<any>;
 }
 
-export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) => {
+export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip, onReRenderClip }) => {
   const [selectedClipId, setSelectedClipId] = useState<number | null>(clips[0]?.id || null);
   const [filter, setFilter] = useState<'pending_review' | 'approved' | 'published' | 'rejected' | 'all'>('pending_review');
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editTags, setEditTags] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isReRendering, setIsReRendering] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(Date.now());
 
   const filteredClips = clips.filter((c) => {
     if (filter === 'all') return true;
@@ -22,11 +25,44 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
 
   const activeClip = clips.find((c) => c.id === selectedClipId) || filteredClips[0];
 
+  useEffect(() => {
+    if (activeClip) {
+      setEditTitle(activeClip.title);
+      setEditDescription(activeClip.description || '');
+      setEditTags(activeClip.tags || '#gta6 #gtavi #gaming #vicecity #gta6gameplay');
+    }
+  }, [activeClip?.id, activeClip?.title]);
+
   const handleSelectClip = (clip: Clip) => {
     setSelectedClipId(clip.id);
     setEditTitle(clip.title);
     setEditDescription(clip.description || '');
-    setEditTags(clip.tags || '#gta #gta6 #gaming #gtaclips #viral');
+    setEditTags(clip.tags || '#gta6 #gtavi #gaming #vicecity #gta6gameplay');
+  };
+
+  const handleReRender = async () => {
+    if (!activeClip || !onReRenderClip) return;
+    const headline = editTitle.trim() || activeClip.title;
+    if (!headline) return;
+    setIsReRendering(true);
+    try {
+      const updated = await onReRenderClip(
+        activeClip.id,
+        headline,
+        editDescription || activeClip.description || '',
+        editTags || activeClip.tags || ''
+      );
+      setRefreshNonce(Date.now());
+      if (updated) {
+        setEditTitle(updated.title);
+        if (updated.description) setEditDescription(updated.description);
+        if (updated.tags) setEditTags(updated.tags);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to re-burn headline onto video');
+    } finally {
+      setIsReRendering(false);
+    }
   };
 
   const handleApprove = async () => {
@@ -178,12 +214,12 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
                 <div className="w-full max-w-[240px] mx-auto aspect-[9/16] rounded-3xl bg-black border-4 border-slate-800 shadow-2xl overflow-hidden relative flex items-center justify-center">
                   {activeClip.r2_url ? (
                     <video
-                      key={activeClip.r2_url}
-                      src={activeClip.r2_url}
+                      key={`${activeClip.r2_url}?v=${refreshNonce}`}
+                      src={`${activeClip.r2_url}?v=${refreshNonce}`}
                       controls
                       playsInline
                       className="w-full h-full object-cover"
-                      poster={activeClip.r2_thumbnail_url}
+                      poster={activeClip.r2_thumbnail_url ? `${activeClip.r2_thumbnail_url}?v=${refreshNonce}` : undefined}
                     />
                   ) : (
                     <div className="text-center p-4 text-xs text-slate-400 space-y-2">
@@ -191,27 +227,37 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ clips, onReviewClip }) =
                       <p>Video rendering or cloud link loading...</p>
                     </div>
                   )}
-                  {/* Watermark overlay preview */}
-                  <div className="absolute top-4 left-3 right-3 text-center pointer-events-none">
-                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-black/60 text-white backdrop-blur-sm">
-                      GTA 6 Highlights
-                    </span>
-                  </div>
                 </div>
 
                 {/* Metadata & Actions Column */}
                 <div className="space-y-4 text-xs">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Video Headline Banner (Middle Bar)
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Headline (Centered White Card Badge)
+                      </span>
+                      {onReRenderClip && (
+                        <button
+                          type="button"
+                          onClick={handleReRender}
+                          disabled={isReRendering || !(editTitle || activeClip.title)}
+                          className="flex items-center gap-1 text-[11px] font-bold text-vice-pink hover:text-vice-orange disabled:opacity-40 transition-colors cursor-pointer"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isReRendering ? 'animate-spin' : ''}`} />
+                          {isReRendering ? 'Re-rendering Video...' : 'Update Headline on Video'}
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="text"
-                      value={editTitle || activeClip.title}
+                      value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="e.g. WHEN 5 STARS HIT AT ONCE 🚁"
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white text-xs font-semibold focus:outline-none focus:border-vice-pink"
+                      placeholder="e.g. STEALING A JET IN GTA 6 IS A DEATH SENTENCE 💀✈️"
+                      className="w-full mt-1.5 px-3 py-2 rounded-xl bg-vice-dark border border-vice-border text-white text-xs font-semibold focus:outline-none focus:border-vice-pink"
                     />
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      Edit the headline and click <strong>Update Headline on Video</strong> to re-burn it directly onto the video card badge.
+                    </p>
                   </div>
 
                   <div>

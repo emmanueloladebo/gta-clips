@@ -32,18 +32,15 @@ class DeepgramTranscriptionWorker:
     def extract_audio(self, video_path: str, output_path: str) -> bool:
         """Extract 16kHz mono audio from video segment to minimize bandwidth."""
         try:
-            # Check if ffmpeg is available
             cmd = [
                 "ffmpeg", "-y", "-i", video_path,
                 "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
                 output_path
             ]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
-            return res.returncode == 0
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+            return res.returncode == 0 and Path(output_path).exists() and Path(output_path).stat().st_size > 1000
         except Exception:
-            # Create dummy audio file if ffmpeg is absent in test environment
-            Path(output_path).write_bytes(b"\x00" * 1024)
-            return True
+            return False
 
     async def transcribe_audio_file(self, audio_path: str, duration_seconds: float = 600.0) -> Dict[str, Any]:
         """
@@ -170,7 +167,12 @@ class DeepgramTranscriptionWorker:
             await db.commit()
 
             audio_file = str(self.scratch_audio_dir / f"seg_{segment.id}.wav")
-            self.extract_audio(segment.file_path, audio_file)
+            extracted = self.extract_audio(segment.file_path, audio_file)
+            if not extracted or not Path(audio_file).exists() or Path(audio_file).stat().st_size < 1000:
+                segment.status = SegmentStatus.FAILED.value
+                segment.error_message = "Audio extraction failed or audio stream absent"
+                await db.commit()
+                return None
 
             try:
                 result = await self.transcribe_audio_file(audio_file, segment.duration_seconds)
@@ -199,6 +201,12 @@ class DeepgramTranscriptionWorker:
                 segment.error_message = f"Transcription error: {str(e)}"
                 await db.commit()
                 return None
+            finally:
+                if Path(audio_file).exists():
+                    try:
+                        Path(audio_file).unlink()
+                    except Exception:
+                        pass
 
 
 transcription_worker = DeepgramTranscriptionWorker()

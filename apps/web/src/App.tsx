@@ -114,6 +114,12 @@ export const App: React.FC = () => {
     await fetchData();
   };
 
+  const handleReRenderClip = async (id: number, headline: string, caption?: string, tags?: string) => {
+    const updated = await api.reRenderClip(id, headline, caption, tags);
+    await fetchData();
+    return updated;
+  };
+
   const handleAddDestination = async (data: any) => {
     await api.addDestination(data);
     await fetchData();
@@ -186,7 +192,11 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'review' && (
-            <ReviewView clips={clips} onReviewClip={handleReviewClip} />
+            <ReviewView
+              clips={clips}
+              onReviewClip={handleReviewClip}
+              onReRenderClip={handleReRenderClip}
+            />
           )}
 
           {currentTab === 'publishing' && (

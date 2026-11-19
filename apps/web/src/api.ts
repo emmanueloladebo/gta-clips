@@ -81,6 +81,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, ...customMeta }),
     }),
+  reRenderClip: (id: number, headline: string, caption?: string, tags?: string) =>
+    request<Clip>(`/clips/${id}/re-render`, {
+      method: 'POST',
+      body: JSON.stringify({ headline, caption, tags }),
+    }),
 
   // Publishing
   getDestinations: () => request<DestinationAccount[]>('/publishing/destinations'),
