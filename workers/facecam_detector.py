@@ -154,11 +154,16 @@ class FacecamDetector:
         avg_h = sum(d[3] for d in matching_faces) / len(matching_faces)
         W, H = matching_faces[0][4], matching_faces[0][5]
 
-        # Calculate crop box for 1080:760 aspect ratio (1.421:1)
-        # Give generous room around face (head + shoulders / mic / webcam frame)
-        target_aspect = 1080.0 / 760.0  # 1.421
-        crop_w = min(W, max(int(avg_w * 2.8), int(W * 0.32)))
+        # Calculate crop box for 1080:740 aspect ratio (1.459:1)
+        # Tight zoom: zoom into the streamer's face/reaction so it occupies the entire upper slot
+        # without capturing peripheral gameplay on the sides of the webcam overlay
+        target_aspect = 1080.0 / 740.0
+        crop_w = min(W, max(int(avg_w * 1.95), int(avg_h * 1.55)))
         crop_h = min(H, int(crop_w / target_aspect))
+
+        if crop_h > H:
+            crop_h = H
+            crop_w = int(crop_h * target_aspect)
 
         # Center around face with slight upward bias (so chin/shoulders are visible)
         center_x = avg_x + avg_w / 2.0
@@ -179,19 +184,19 @@ class FacecamDetector:
         """Quadrant-based crop when no face is found or OpenCV is absent."""
         pos = (position or "top_right").lower()
         if pos == "top_left":
-            return "crop=w=iw*0.35:h=ih*0.42:x=0:y=0", "top_left"
+            return "crop=w=iw*0.26:h=ih*0.32:x=0:y=0", "top_left"
         elif pos == "middle_left":
-            return "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.28", "middle_left"
+            return "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.28", "middle_left"
         elif pos == "bottom_left":
-            return "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58", "bottom_left"
+            return "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.58", "bottom_left"
         elif pos == "middle_right":
-            return "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.28", "middle_right"
+            return "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.28", "middle_right"
         elif pos == "bottom_right":
-            return "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58", "bottom_right"
+            return "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.58", "bottom_right"
         elif pos == "top_center":
-            return "crop=w=iw*0.42:h=ih*0.42:x=iw*0.29:y=0", "top_center"
-        else:  # top_right
-            return "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0", "top_right"
+            return "crop=w=iw*0.30:h=ih*0.36:x=iw*0.35:y=0", "top_center"
+        else:  # top_right default
+            return "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=0", "top_right"
 
 
 facecam_detector = FacecamDetector()

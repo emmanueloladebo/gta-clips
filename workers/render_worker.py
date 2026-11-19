@@ -61,32 +61,32 @@ class FFmpegRenderWorker:
     ) -> str:
         """
         Creates an FFmpeg complex filter for viral split-screen vertical video:
-        1. Top: Streamer facecam cropped and scaled to 1080x740.
+        1. Top: Streamer facecam cropped tight to face/webcam and scaled to 1080x740.
         2. Bottom: Main GTA 6 gameplay cropped and scaled to 1080x1180.
-        3. Middle: Centered white card badge with bold black headline text.
+        3. Middle: High-impact multiline pill headline badge overlay.
         """
         if not crop_cam or not crop_cam.startswith("crop="):
             if facecam_pos == "top_left":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=0"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=0"
             elif facecam_pos == "middle_left":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.28"
             elif facecam_pos == "bottom_right":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.58"
             elif facecam_pos == "bottom_left":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.58"
             elif facecam_pos == "middle_right":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.28"
             elif facecam_pos == "top_center" or facecam_pos == "center_zoom":
-                crop_cam = "crop=w=iw*0.42:h=ih*0.45:x=iw*0.29:y=0"
+                crop_cam = "crop=w=iw*0.30:h=ih*0.36:x=iw*0.35:y=0"
             else:  # top_right default
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=0"
 
         filter_complex = (
             "[0:v]split=2[raw_cam][raw_game];"
             f"[raw_cam]{crop_cam},scale=1080:740:force_original_aspect_ratio=increase,crop=1080:740[facecam];"
             "[raw_game]scale=2062:1180:force_original_aspect_ratio=increase,crop=1080:1180[gameplay];"
             "[facecam][gameplay]vstack=inputs=2[stacked];"
-            f"[stacked]drawtext=text='{headline_text}':fontsize=38:fontcolor=black:line_spacing=12:x=(w-text_w)/2:y=715:box=1:boxcolor=white@1.0:boxborderw=24[final_v]"
+            "[stacked][1:v]overlay=x=0:y=680[final_v]"
         )
         return filter_complex
 
@@ -102,40 +102,43 @@ class FFmpegRenderWorker:
         facecam_pos: str = "top_right",
         crop_cam: Optional[str] = None
     ) -> bool:
-        """Execute FFmpeg command to produce 1080x1920 H.264/AAC MP4 with clean white headline card."""
-        temp_dir = self.output_dir / "tmp_text"
+        """Execute FFmpeg command to produce 1080x1920 H.264/AAC MP4 with clean multiline pill headline badge."""
+        temp_dir = self.output_dir / "tmp_badges"
         temp_dir.mkdir(parents=True, exist_ok=True)
         unique_prefix = f"render_{int(datetime.now(timezone.utc).timestamp()*1000)}_{os.getpid()}"
+        badge_file = temp_dir / f"{unique_prefix}_badge.png"
 
-        headline_file = temp_dir / f"{unique_prefix}_headline.txt"
-        card_headline = format_headline_card_text(headline_text or "GTA 6 HIGHLIGHT")
-        headline_file.write_text(card_headline, encoding="utf-8")
-
-        # In FFmpeg, escape colon and backslash in textfile path
-        h_path = str(headline_file).replace("\\", "/").replace(":", "\\:")
+        from packages.shared.badge_generator import generate_headline_badge_png
+        ok, badge_h = generate_headline_badge_png(
+            headline=headline_text or "GTA 6 HIGHLIGHT",
+            output_png_path=str(badge_file),
+            canvas_w=1080,
+            font_size=52
+        )
+        badge_y = max(600, min(800, int(740 - badge_h / 2)))
 
         if not crop_cam or not crop_cam.startswith("crop="):
             if facecam_pos == "top_left":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=0"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=0"
             elif facecam_pos == "middle_left":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.28"
             elif facecam_pos == "bottom_right":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.58"
             elif facecam_pos == "bottom_left":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=0:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.58"
             elif facecam_pos == "middle_right":
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.28"
             elif facecam_pos == "top_center" or facecam_pos == "center_zoom":
-                crop_cam = "crop=w=iw*0.42:h=ih*0.45:x=iw*0.29:y=0"
+                crop_cam = "crop=w=iw*0.30:h=ih*0.36:x=iw*0.35:y=0"
             else:  # top_right default
-                crop_cam = "crop=w=iw*0.35:h=ih*0.42:x=iw*0.65:y=0"
+                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=0"
 
         filter_str = (
             "[0:v]split=2[raw_cam][raw_game];"
             f"[raw_cam]{crop_cam},scale=1080:740:force_original_aspect_ratio=increase,crop=1080:740[facecam];"
             "[raw_game]scale=2062:1180:force_original_aspect_ratio=increase,crop=1080:1180[gameplay];"
             "[facecam][gameplay]vstack=inputs=2[stacked];"
-            f"[stacked]drawtext=textfile='{h_path}':fontsize=38:fontcolor=black:line_spacing=12:x=(w-text_w)/2:y=715:box=1:boxcolor=white@1.0:boxborderw=24[final_v]"
+            f"[stacked][1:v]overlay=x=0:y={badge_y}[final_v]"
         )
 
         cmd = [
@@ -143,6 +146,7 @@ class FFmpegRenderWorker:
             "-ss", str(start_sec),
             "-t", str(duration_sec),
             "-i", input_file,
+            "-i", str(badge_file),
             "-filter_complex", filter_str,
             "-map", "[final_v]",
             "-map", "0:a?",
@@ -164,9 +168,9 @@ class FFmpegRenderWorker:
         except Exception:
             return False
         finally:
-            if headline_file.exists():
+            if badge_file.exists():
                 try:
-                    headline_file.unlink()
+                    badge_file.unlink()
                 except Exception:
                     pass
 
@@ -383,7 +387,40 @@ class FFmpegRenderWorker:
             rendered = False
             duration_sec = clip.duration_seconds
 
-            if raw_seg_exists and candidate:
+            if old_clip_exists:
+                # Ultra-fast re-burn: Burn the new multiline pill badge directly over the existing 9:16 clip in ~1.5s
+                temp_dir = self.output_dir / "tmp_badges"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                badge_file = temp_dir / f"re_badge_{clip_id}_{ts}.png"
+                from packages.shared.badge_generator import generate_headline_badge_png
+                ok, badge_h = generate_headline_badge_png(
+                    headline=new_headline,
+                    output_png_path=str(badge_file),
+                    canvas_w=1080,
+                    font_size=52
+                )
+                badge_y = max(600, min(800, int(740 - badge_h / 2)))
+
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", clip.portrait_video_path,
+                    "-i", str(badge_file),
+                    "-filter_complex", f"[0:v][1:v]overlay=x=0:y={badge_y}[v]",
+                    "-map", "[v]",
+                    "-map", "0:a?",
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "20",
+                    "-c:a", "copy",
+                    new_clip_path
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+                rendered = (res.returncode == 0 and Path(new_clip_path).exists() and Path(new_clip_path).stat().st_size > 50000)
+                try:
+                    badge_file.unlink()
+                except Exception:
+                    pass
+            elif raw_seg_exists and candidate:
                 strm = (await db.execute(select(Streamer).where(Streamer.id == clip.streamer_id))).scalar_one_or_none()
                 streamer_name = strm.display_name if strm else "Streamer"
 
@@ -409,32 +446,6 @@ class FFmpegRenderWorker:
                     facecam_pos=detected_region,
                     crop_cam=crop_cam
                 )
-            elif old_clip_exists:
-                # Fast re-burn: Burn the new white card badge directly over the divider line on the existing 9:16 clip
-                temp_dir = self.output_dir / "tmp_text"
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                formatted_card = format_headline_card_text(new_headline)
-                text_file = temp_dir / f"re_card_{clip_id}_{ts}.txt"
-                text_file.write_text(formatted_card, encoding="utf-8")
-                escaped_text_path = str(text_file).replace("\\", "/").replace(":", "\\:")
-                card_filter = f"drawtext=textfile='{escaped_text_path}':fontsize=38:fontcolor=black:line_spacing=12:x=(w-text_w)/2:y=715:box=1:boxcolor=white@1.0:boxborderw=24"
-
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-i", clip.portrait_video_path,
-                    "-vf", card_filter,
-                    "-c:v", "libx264",
-                    "-preset", "faster",
-                    "-crf", "22",
-                    "-c:a", "copy",
-                    new_clip_path
-                ]
-                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
-                rendered = (res.returncode == 0 and Path(new_clip_path).exists() and Path(new_clip_path).stat().st_size > 50000)
-                try:
-                    text_file.unlink()
-                except Exception:
-                    pass
 
             if not rendered or not Path(new_clip_path).exists() or Path(new_clip_path).stat().st_size < 50000:
                 return None
@@ -463,9 +474,12 @@ class FFmpegRenderWorker:
             clip.file_size_bytes = Path(new_clip_path).stat().st_size
             await db.commit()
 
-            # Upload new files to R2
+            # Upload new files to R2 in background task so HTTP endpoint responds immediately!
             from workers.storage_worker import storage_worker
-            await storage_worker.upload_clip_to_r2(clip.id)
+            try:
+                asyncio.create_task(storage_worker.upload_clip_to_r2(clip.id))
+            except Exception:
+                pass
             await db.refresh(clip)
             return clip
 
