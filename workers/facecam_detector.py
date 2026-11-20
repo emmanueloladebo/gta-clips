@@ -72,8 +72,10 @@ class FacecamDetector:
         if not CV2_AVAILABLE or not self.cascade or not os.path.exists(video_path):
             return self._fallback_crop(preferred_position or "top_right")
 
-        sample_frames = ["/tmp/face_sample_1.jpg", "/tmp/face_sample_2.jpg", "/tmp/face_sample_3.jpg"]
-        sample_times = [2.0, 8.0, 15.0]
+        sample_frames = [
+            f"/tmp/face_sample_{i}.jpg" for i in range(6)
+        ]
+        sample_times = [2.0, 6.0, 12.0, 20.0, 35.0, 60.0]
 
         all_detections = []
         for st, frame_file in zip(sample_times, sample_frames):
@@ -154,23 +156,26 @@ class FacecamDetector:
         avg_h = sum(d[3] for d in matching_faces) / len(matching_faces)
         W, H = matching_faces[0][4], matching_faces[0][5]
 
-        # Calculate crop box for 1080:740 aspect ratio (1.459:1)
-        # Tight zoom: zoom into the streamer's face/reaction so it occupies the entire upper slot
-        # without capturing peripheral gameplay on the sides of the webcam overlay
+        # Calculate crop box for 1080:740 aspect ratio (1.45946:1)
+        # Tight zoom: Streamer webcam overlays typically occupy ~20% of the stream width.
+        # We size the crop box to tightly cover the streamer's reaction box so that it fills
+        # the entire 1080x740 slot edge-to-edge as a cover portrait with zero peripheral gameplay.
         target_aspect = 1080.0 / 740.0
-        crop_w = min(W, max(int(avg_w * 1.95), int(avg_h * 1.55)))
-        crop_h = min(H, int(crop_w / target_aspect))
+        ideal_w = int(W * 0.205)
+        face_based_w = int(avg_w * 4.2)
+        crop_w = max(ideal_w, min(int(W * 0.23), face_based_w))
+        crop_h = int(crop_w / target_aspect)
 
         if crop_h > H:
             crop_h = H
             crop_w = int(crop_h * target_aspect)
 
-        # Center around face with slight upward bias (so chin/shoulders are visible)
+        # Center around face with upward bias (so face is nicely framed and chin/shoulders are visible)
         center_x = avg_x + avg_w / 2.0
         center_y = avg_y + avg_h / 2.0
 
         crop_x = int(center_x - crop_w / 2.0)
-        crop_y = int(center_y - crop_h / 2.2)
+        crop_y = int(center_y - crop_h * 0.45)
 
         # Clamp inside frame boundaries
         crop_x = max(0, min(W - crop_w, crop_x))
@@ -181,22 +186,22 @@ class FacecamDetector:
         return crop_filter, best_region
 
     def _fallback_crop(self, position: str) -> Tuple[str, str]:
-        """Quadrant-based crop when no face is found or OpenCV is absent."""
+        """Quadrant-based crop when no face is found or OpenCV is absent. Matches 1080:740 (1.45946)."""
         pos = (position or "top_right").lower()
         if pos == "top_left":
-            return "crop=w=iw*0.26:h=ih*0.32:x=0:y=0", "top_left"
+            return "crop=w=iw*0.205:h=ih*0.250:x=0:y=0", "top_left"
         elif pos == "middle_left":
-            return "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.28", "middle_left"
+            return "crop=w=iw*0.205:h=ih*0.250:x=0:y=ih*0.38", "middle_left"
         elif pos == "bottom_left":
-            return "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.58", "bottom_left"
+            return "crop=w=iw*0.205:h=ih*0.250:x=0:y=ih*0.75", "bottom_left"
         elif pos == "middle_right":
-            return "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.28", "middle_right"
+            return "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=ih*0.38", "middle_right"
         elif pos == "bottom_right":
-            return "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.58", "bottom_right"
+            return "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=ih*0.75", "bottom_right"
         elif pos == "top_center":
-            return "crop=w=iw*0.30:h=ih*0.36:x=iw*0.35:y=0", "top_center"
+            return "crop=w=iw*0.205:h=ih*0.250:x=iw*0.3975:y=0", "top_center"
         else:  # top_right default
-            return "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=0", "top_right"
+            return "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=0", "top_right"
 
 
 facecam_detector = FacecamDetector()

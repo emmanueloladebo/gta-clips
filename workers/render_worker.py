@@ -67,19 +67,19 @@ class FFmpegRenderWorker:
         """
         if not crop_cam or not crop_cam.startswith("crop="):
             if facecam_pos == "top_left":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=0"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=0:y=0"
             elif facecam_pos == "middle_left":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=0:y=ih*0.38"
             elif facecam_pos == "bottom_right":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=ih*0.75"
             elif facecam_pos == "bottom_left":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=0:y=ih*0.75"
             elif facecam_pos == "middle_right":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=ih*0.38"
             elif facecam_pos == "top_center" or facecam_pos == "center_zoom":
-                crop_cam = "crop=w=iw*0.30:h=ih*0.36:x=iw*0.35:y=0"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.3975:y=0"
             else:  # top_right default
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=0"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=0"
 
         filter_complex = (
             "[0:v]split=2[raw_cam][raw_game];"
@@ -119,19 +119,19 @@ class FFmpegRenderWorker:
 
         if not crop_cam or not crop_cam.startswith("crop="):
             if facecam_pos == "top_left":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=0"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=0:y=0"
             elif facecam_pos == "middle_left":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=0:y=ih*0.38"
             elif facecam_pos == "bottom_right":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=ih*0.75"
             elif facecam_pos == "bottom_left":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=0:y=ih*0.58"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=0:y=ih*0.75"
             elif facecam_pos == "middle_right":
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=ih*0.28"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=ih*0.38"
             elif facecam_pos == "top_center" or facecam_pos == "center_zoom":
-                crop_cam = "crop=w=iw*0.30:h=ih*0.36:x=iw*0.35:y=0"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.3975:y=0"
             else:  # top_right default
-                crop_cam = "crop=w=iw*0.26:h=ih*0.32:x=iw*0.74:y=0"
+                crop_cam = "crop=w=iw*0.205:h=ih*0.250:x=iw*0.795:y=0"
 
         filter_str = (
             "[0:v]split=2[raw_cam][raw_game];"
@@ -264,10 +264,25 @@ class FFmpegRenderWorker:
             final_tags = "#gta6 #gtavi #gaming #vicecity #gta6gameplay"
             full_description = f"{formatted_caption}\n\n{final_tags}"
 
+            # Streamer-specific webcam positioning preference
+            strm_key = f"{clean_name} {streamer.channel_id if streamer else ''}".lower()
+            if "kai" in strm_key:
+                preferred_pos = "middle_left"
+            elif "speed" in strm_key:
+                preferred_pos = "bottom_right"
+            elif "tgg" in strm_key or "ttg" in strm_key:
+                preferred_pos = "top_right"
+            elif "agent" in strm_key:
+                preferred_pos = "top_right"
+            elif "marlon" in strm_key:
+                preferred_pos = "top_right"
+            else:
+                preferred_pos = facecam_pos or "top_right"
+
             # Detect smart streamer facecam coordinates across candidate regions (left, middle-left, top-right, middle-right, top)
             crop_cam, detected_region = facecam_detector.detect_streamer_facecam(
                 video_path=segment.file_path,
-                preferred_position=facecam_pos
+                preferred_position=preferred_pos
             )
 
             rendered = self.render_vertical_clip(
@@ -405,7 +420,7 @@ class FFmpegRenderWorker:
                     "ffmpeg", "-y",
                     "-i", clip.portrait_video_path,
                     "-i", str(badge_file),
-                    "-filter_complex", f"[0:v][1:v]overlay=x=0:y={badge_y}[v]",
+                    "-filter_complex", f"[0:v]drawbox=x=0:y=665:w=1080:h=150:color=black@0.9:t=fill[cleaned];[cleaned][1:v]overlay=x=0:y={badge_y}[v]",
                     "-map", "[v]",
                     "-map", "0:a?",
                     "-c:v", "libx264",
